@@ -1,50 +1,42 @@
 package es.altamirano.gps.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialExpressiveTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MotionScheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import es.altamirano.common.ui.AppTheme
+import es.altamirano.common.ui.withBrandSelection
 
-/**
- * Material 3 Expressive (la guía de diseño de Android 16 y 17) con los colores del fondo de pantalla
- * (Material You) y su movimiento con rebote. Lo pidió Bruno: «algo más colorido y translúcido».
- */
+// Verde de monte y azul de agua, fijos. Con los colores del fondo de pantalla (Material You) el
+// móvil de Bruno daba una paleta gris y lo seleccionado no se distinguía: quiere verde clarito.
+private val Brand = Color(0xFF1A7F60)
+private val BrandDark = Color(0xFF4FD1A1)
+
+private val Light = lightColorScheme(
+    primary = Brand, onPrimary = Color.White, primaryContainer = Color(0xFFC8EEDC), onPrimaryContainer = Color(0xFF00382A),
+    secondary = Color(0xFF3F6656), onSecondary = Color.White,
+    tertiary = Color(0xFF2B6A8C), onTertiary = Color.White, tertiaryContainer = Color(0xFFC7E7FF), onTertiaryContainer = Color(0xFF00344B),
+    background = Color(0xFFF5FBF7), onBackground = Color(0xFF171D1A), surface = Color(0xFFF5FBF7), onSurface = Color(0xFF171D1A),
+    surfaceVariant = Color(0xFFDBE5DE), onSurfaceVariant = Color(0xFF404943),
+    surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFEFF5F1), surfaceContainer = Color(0xFFE9F0EB),
+    surfaceContainerHigh = Color(0xFFE3EAE5), surfaceContainerHighest = Color(0xFFDEE4E0),
+    outline = Color(0xFF707973), outlineVariant = Color(0xFFBFC9C2),
+).withBrandSelection(Brand, dark = false)
+
+private val Dark = darkColorScheme(
+    primary = BrandDark, onPrimary = Color(0xFF00382A), primaryContainer = Color(0xFF005140), onPrimaryContainer = Color(0xFFA6F2D0),
+    secondary = Color(0xFFA5CFBC), onSecondary = Color(0xFF0D372A),
+    tertiary = Color(0xFF94CDF5), onTertiary = Color(0xFF00344B), tertiaryContainer = Color(0xFF0B4C6B), onTertiaryContainer = Color(0xFFC7E7FF),
+    background = Color(0xFF0F1512), onBackground = Color(0xFFDEE4E0), surface = Color(0xFF0F1512), onSurface = Color(0xFFDEE4E0),
+    surfaceVariant = Color(0xFF404943), onSurfaceVariant = Color(0xFFBFC9C2),
+    surfaceContainerLowest = Color(0xFF0A0F0D), surfaceContainerLow = Color(0xFF171D1A), surfaceContainer = Color(0xFF1B211E),
+    surfaceContainerHigh = Color(0xFF252B28), surfaceContainerHighest = Color(0xFF303633),
+    outline = Color(0xFF89938C), outlineVariant = Color(0xFF404943),
+).withBrandSelection(BrandDark, dark = true)
+
 @Composable
-fun GpsTheme(content: @Composable () -> Unit) {
-    val ctx = LocalContext.current
-    val scheme = if (isSystemInDarkTheme()) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-    MaterialExpressiveTheme(colorScheme = scheme, motionScheme = MotionScheme.expressive(), content = content)
-}
+fun GpsTheme(content: @Composable () -> Unit) = AppTheme(if (isSystemInDarkTheme()) Dark else Light, content = content)
 
 /** Colores fijos del mapa: tienen que verse igual sobre el topográfico, la ortofoto y el Base. */
 object MapColors {
@@ -52,51 +44,4 @@ object MapColors {
     val opened = Color(0xFF8E24AA)
     val position = Color(0xFF1E88E5)
     val stale = Color(0xFF9E9E9E)
-}
-
-/** Forma grande de las tarjetas de Expressive. */
-val CardShape = RoundedCornerShape(28.dp)
-
-/**
- * «Cristal»: una superficie translúcida tintada con el color del sistema, con un filo claro y
- * sombra suave, para lo que flota sobre el mapa (Compose no difumina lo de debajo sin pintarlo
- * dos veces; con el tinte y el filo basta para que se lea encima de cualquier capa).
- */
-@Composable
-fun Modifier.glass(shape: Shape = RoundedCornerShape(20.dp), tint: Color = MaterialTheme.colorScheme.surfaceContainer, alpha: Float = 0.78f): Modifier =
-    this.shadow(6.dp, shape, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
-        .clip(shape)
-        .background(tint.copy(alpha = alpha))
-        .border(1.dp, Color.White.copy(alpha = if (isSystemInDarkTheme()) 0.12f else 0.55f), shape)
-
-/** El degradado de color de las cabeceras: primario → terciario del tema, muy suave. */
-@Composable
-fun headerBrush(): Brush {
-    val c = MaterialTheme.colorScheme
-    return Brush.linearGradient(listOf(c.primaryContainer, c.tertiaryContainer.copy(alpha = 0.85f), c.surface))
-}
-
-/**
- * Cabecera de las pestañas: título grande sobre un degradado de color que se funde con el fondo,
- * con un icono en un círculo de color (como las apps de Google con Expressive).
- */
-@Composable
-fun Header(title: String, subtitle: String?, icon: ImageVector, side: Dp = 16.dp) {
-    Box(Modifier.fillMaxWidth().background(headerBrush()).statusBarsPadding().padding(start = side, end = side, top = 18.dp, bottom = 22.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(28.dp))
-            }
-            Column {
-                Text(title, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                subtitle?.let { Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)) }
-            }
-        }
-    }
-}
-
-/** Tarjeta tonal de Expressive: esquinas grandes y un color del tema de fondo. */
-@Composable
-fun TonalCard(modifier: Modifier = Modifier, container: Color = MaterialTheme.colorScheme.surfaceContainerHigh, content: @Composable () -> Unit) {
-    Box(modifier.fillMaxWidth().clip(CardShape).background(container)) { content() }
 }

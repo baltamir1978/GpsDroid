@@ -26,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import es.altamirano.common.ui.TonalCard
+import es.altamirano.common.ui.Header
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.SatelliteAlt
 import androidx.compose.material.icons.Icons

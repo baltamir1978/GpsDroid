@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import es.altamirano.common.ui.glass
 import es.altamirano.gps.core.MapLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color

@@ -35,6 +35,12 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.2.1 (22-nov-2026): paleta verde fija.** Con los colores del fondo de pantalla (Material You)
+el móvil de Bruno daba una paleta gris y lo seleccionado (chips de Offline, interruptores) no se
+distinguía: quiere verde clarito. Ahora verde de monte + azul de agua fijos, y lo seleccionado con
+`withBrandSelection`. Las piezas de diseño (`glass`, `Header`, `TonalCard`, `AppTheme`) pasaron a
+`droid-common` para que las usen todas las apps. **Sin probar en el móvil.**
+
 **0.2.0 (22-nov-2026): aspecto Material 3 Expressive.** Lo pidió Bruno («guías de diseño de
 Android 17, algo más colorido y translúcido»). material3 1.5.0-rc01 (como VideoDroid) con
 `MaterialExpressiveTheme` + `MotionScheme.expressive()` y colores del sistema. El mapa ocupa toda

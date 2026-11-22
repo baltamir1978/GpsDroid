@@ -30,6 +30,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import es.altamirano.common.ui.CardShape
+import es.altamirano.common.ui.TonalCard
+import es.altamirano.common.ui.Header
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.LinearWavyProgressIndicator
