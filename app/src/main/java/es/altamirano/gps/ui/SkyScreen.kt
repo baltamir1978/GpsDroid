@@ -11,12 +11,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +26,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.filled.SatelliteAlt
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -82,34 +86,42 @@ fun SkyScreen() {
     val placed = sky.filter { it.hasPosition }
     val unplaced = sky.size - placed.size
     val measurer = rememberTextMeasurer()
-    val lineColor = MaterialTheme.colorScheme.outline
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val lineColor = Color.White.copy(alpha = 0.22f)
+    val labelColor = Color.White.copy(alpha = 0.85f)
 
-    Column(Modifier.statusBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Canvas(Modifier.widthIn(max = 420.dp).fillMaxWidth().aspectRatio(1f)) {
-            val r = size.minDimension / 2 * 0.88f
-            val c = Offset(size.width / 2, size.height / 2)
-            for (k in listOf(1f, 2f / 3, 1f / 3)) drawCircle(lineColor, r * k, c, style = Stroke(1.dp.toPx()))
-            drawLine(lineColor, Offset(c.x, c.y - r), Offset(c.x, c.y + r), 1.dp.toPx())
-            drawLine(lineColor, Offset(c.x - r, c.y), Offset(c.x + r, c.y), 1.dp.toPx())
-            for ((txt, ang) in listOf("N" to 0f, "E" to 90f, "S" to 180f, "O" to 270f)) {
-                val m = measurer.measure(txt, TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = labelColor))
-                val a = Math.toRadians(ang.toDouble())
-                val p = Offset(c.x + (r + 12.dp.toPx()) * sin(a).toFloat(), c.y - (r + 12.dp.toPx()) * cos(a).toFloat())
-                drawText(m, topLeft = Offset(p.x - m.size.width / 2, p.y - m.size.height / 2))
-            }
-            for (s in placed.sortedBy { it.usedInFix }) {
-                val d = r * (90f - s.elevation.coerceIn(0f, 90f)) / 90f
-                val a = Math.toRadians(s.azimuth.toDouble())
-                val p = Offset(c.x + d * sin(a).toFloat(), c.y - d * cos(a).toFloat())
-                val col = constellation(s.constellation).color
-                val rad = (4f + (s.cn0.coerceIn(0f, 50f) / 50f) * 6f).dp.toPx()
-                if (s.usedInFix) drawCircle(col, rad, p)
-                else drawCircle(col.copy(alpha = if (s.cn0 > 0) 0.85f else 0.35f), rad, p, style = Stroke(2.dp.toPx()))
+    val used = sky.count { it.usedInFix }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = LocalBottomBar.current + 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Header("Satélites", if (sky.isEmpty()) "Esperando al GPS…" else "$used usados de ${sky.size} a la vista", Icons.Filled.SatelliteAlt)
+        // El cielo de noche: un degradado azul oscuro en el que los colores de las constelaciones resaltan.
+        Box(Modifier.padding(horizontal = 16.dp).widthIn(max = 420.dp).fillMaxWidth().aspectRatio(1f).clip(CircleShape)
+            .background(Brush.radialGradient(listOf(Color(0xFF243B6B), Color(0xFF0E1630))))) {
+            Canvas(Modifier.fillMaxSize()) {
+                val r = size.minDimension / 2 * 0.84f
+                val c = Offset(size.width / 2, size.height / 2)
+                for (k in listOf(1f, 2f / 3, 1f / 3)) drawCircle(lineColor, r * k, c, style = Stroke(1.dp.toPx()))
+                drawLine(lineColor, Offset(c.x, c.y - r), Offset(c.x, c.y + r), 1.dp.toPx())
+                drawLine(lineColor, Offset(c.x - r, c.y), Offset(c.x + r, c.y), 1.dp.toPx())
+                for ((txt, ang) in listOf("N" to 0f, "E" to 90f, "S" to 180f, "O" to 270f)) {
+                    val m = measurer.measure(txt, TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = labelColor))
+                    val a = Math.toRadians(ang.toDouble())
+                    val p = Offset(c.x + (r + 11.dp.toPx()) * sin(a).toFloat(), c.y - (r + 11.dp.toPx()) * cos(a).toFloat())
+                    drawText(m, topLeft = Offset(p.x - m.size.width / 2, p.y - m.size.height / 2))
+                }
+                for (s in placed.sortedBy { it.usedInFix }) {
+                    val d = r * (90f - s.elevation.coerceIn(0f, 90f)) / 90f
+                    val a = Math.toRadians(s.azimuth.toDouble())
+                    val p = Offset(c.x + d * sin(a).toFloat(), c.y - d * cos(a).toFloat())
+                    val col = constellation(s.constellation).color
+                    val rad = (4f + (s.cn0.coerceIn(0f, 50f) / 50f) * 6f).dp.toPx()
+                    if (s.usedInFix) {
+                        drawCircle(col.copy(alpha = 0.3f), rad * 1.9f, p)   // halo
+                        drawCircle(col, rad, p)
+                    } else drawCircle(col.copy(alpha = if (s.cn0 > 0) 0.9f else 0.4f), rad, p, style = Stroke(2.dp.toPx()))
+                }
             }
         }
-        if (unplaced > 0) Text("+$unplaced sin situar todavía", fontSize = 13.sp, color = labelColor)
+        if (unplaced > 0) Text("+$unplaced sin situar todavía", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Legend(sky)
         FixCard(sky, loc, tick)
     }
@@ -119,15 +131,13 @@ fun SkyScreen() {
 private fun Legend(sky: List<Satellite>) {
     val groups = sky.groupBy { constellation(it.constellation) }.toList().sortedByDescending { it.second.size }
     if (groups.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        groups.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                row.forEach { (c, list) ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(10.dp).clip(CircleShape).background(c.color))
-                        Text("  ${c.name} ${list.count { it.usedInFix }}/${list.size}", fontSize = 13.sp)
-                    }
-                }
+    FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        groups.forEach { (c, list) ->
+            Row(Modifier.clip(RoundedCornerShape(50)).background(c.color.copy(alpha = 0.18f)).padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(c.color))
+                Text("  ${c.name}  ${list.count { it.usedInFix }}/${list.size}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -158,10 +168,10 @@ private fun FixCard(sky: List<Satellite>, loc: android.location.Location?, @Supp
         val best = sky.map { it.cn0 }.sorted().takeLast(4)
         if (best.isNotEmpty()) add("Señal (4 mejores)" to "%.0f dB-Hz".format(best.average()))
     }
-    Card(Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    TonalCard(Modifier.padding(horizontal = 16.dp).widthIn(max = 420.dp), MaterialTheme.colorScheme.secondaryContainer) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             rows.forEach { (k, v) ->
-                Row { Text(k, Modifier.weight(0.42f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v, Modifier.weight(0.58f), fontSize = 14.sp) }
+                Row { Text(k, Modifier.weight(0.42f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)); Text(v, Modifier.weight(0.58f), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSecondaryContainer) }
             }
         }
     }

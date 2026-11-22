@@ -13,8 +13,8 @@ android {
         applicationId = "es.altamirano.gps"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.1.2"
+        versionCode = 5
+        versionName = "0.2.0"
     }
 
     // La clave de release vive fuera del repositorio; sin ella la release sale sin firmar.
@@ -61,4 +61,14 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.osmdroid)
     testImplementation(libs.junit)
+}
+
+kotlin {
+    compilerOptions {
+        optIn.addAll(
+            "androidx.compose.material3.ExperimentalMaterial3Api",
+            "androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
+            "androidx.compose.foundation.layout.ExperimentalLayoutApi",
+        )
+    }
 }

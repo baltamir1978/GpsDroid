@@ -8,14 +8,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RangeSlider
@@ -33,6 +30,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -92,9 +98,10 @@ fun DownloadScreen() {
     val dbBytes by produceState(0L, dl.running, purge) { value = withContext(Dispatchers.IO) { Tiles.cacheBytes() } }
 
     val side = gutter()
-    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = side, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Mapas offline", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = LocalBottomBar.current + 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Header("Mapas offline", "Para cuando no haya cobertura", Icons.Filled.CloudDownload, side)
+        Column(Modifier.padding(horizontal = side), verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
         Section("Zona") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -128,24 +135,28 @@ fun DownloadScreen() {
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().clip(CardShape).background(Brush.linearGradient(listOf(
+            MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer)))) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (dl.running) {
                     Text("Descargando" + (dl.layer?.let { " · ${it.label}" } ?: ""), fontWeight = FontWeight.Bold)
-                    LinearProgressIndicator(progress = { if (dl.total > 0) dl.done.toFloat() / dl.total else 0f }, Modifier.fillMaxWidth())
+                    LinearWavyProgressIndicator(progress = { if (dl.total > 0) dl.done.toFloat() / dl.total else 0f }, Modifier.fillMaxWidth().height(14.dp))
                     Text("${OfflineZone.formatCount(dl.done.toLong())} de ${OfflineZone.formatCount(dl.total.toLong())} teselas" +
                         if (dl.failed > 0) " · ${dl.failed} fallos" else "", fontSize = 14.sp)
                     Text("Mantén la app abierta hasta que acabe.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(onClick = { Tiles.cancel() }) { Text("Cancelar") }
                 } else {
-                    Text("${OfflineZone.formatCount(tiles)} teselas · unos ${OfflineZone.formatBytes(bytes)}", fontWeight = FontWeight.Bold)
+                    Text(OfflineZone.formatBytes(bytes), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                    Text("${OfflineZone.formatCount(tiles)} teselas (aprox.)", fontWeight = FontWeight.Medium)
                     Text("Libre en el móvil: ${OfflineZone.formatBytes(free)}", fontSize = 14.sp)
                     if (tooMany) Text("Pasa del tope de ${OfflineZone.formatCount(OfflineZone.MAX_TILES)} teselas por descarga: baja el zoom máximo o el radio. (El IGN es un servicio público: nada de bajarlo entero.)",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     if (bytes > free) Text("No cabe.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     dl.message?.let { Text(it, fontSize = 13.sp) }
-                    Button(onClick = { box?.let { Tiles.start(it, zmin, zmax, layers) } },
-                        enabled = box != null && tiles > 0 && !tooMany && bytes < free && online) { Text("Descargar") }
+                    Button(onClick = { box?.let { Tiles.start(it, zmin, zmax, layers) } }, Modifier.height(52.dp),
+                        enabled = box != null && tiles > 0 && !tooMany && bytes < free && online) {
+                        Icon(Icons.Filled.CloudDownload, null); Text("  Descargar", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    }
                     if (!online) Text("Activa «Usar la red» para descargar.", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                     Text("Lo que ya está guardado no se vuelve a bajar: repetir una descarga la reanuda.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -179,6 +190,7 @@ fun DownloadScreen() {
             }
         }
         Text("Mapas: ${MapLayer.ATTRIBUTION} (CC BY 4.0).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 
     purge?.let { l ->
@@ -192,8 +204,10 @@ fun DownloadScreen() {
 
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-        content()
+    TonalCard {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            content()
+        }
     }
 }

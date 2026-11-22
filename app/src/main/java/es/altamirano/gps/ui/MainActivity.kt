@@ -10,7 +10,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Map
@@ -21,7 +20,6 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,8 +27,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.vector.ImageVector
 import es.altamirano.common.ui.isWide
 import es.altamirano.gps.data.Gps
@@ -62,8 +72,10 @@ private fun App() {
     val fit by Tracks.fitRequest.collectAsState()
     LaunchedEffect(fit) { if (fit > 0) tab = Tab.MAP.ordinal }
 
-    val content: @Composable (Modifier) -> Unit = { m ->
-        Box(m) {
+    // Que cada pestaña recuerde lo suyo (lo elegido en Offline, el scroll) al volver a ella.
+    val saved = rememberSaveableStateHolder()
+    val screen: @Composable () -> Unit = {
+        saved.SaveableStateProvider(tab) {
             when (Tab.entries[tab]) {
                 Tab.MAP -> MapScreen()
                 Tab.SKY -> SkyScreen()
@@ -73,23 +85,31 @@ private fun App() {
         }
     }
     if (isWide()) {
-        Row(Modifier.fillMaxSize()) {
-            NavigationRail {
+        Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+            NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 Tab.entries.forEach { t ->
                     NavigationRailItem(selected = tab == t.ordinal, onClick = { tab = t.ordinal },
                         icon = { Icon(t.icon, null) }, label = { Text(t.label) })
                 }
             }
-            content(Modifier.weight(1f))
+            Box(Modifier.weight(1f)) { CompositionLocalProvider(LocalBottomBar provides 0.dp) { screen() } }
         }
     } else {
-        Scaffold(bottomBar = {
-            NavigationBar {
+        // El contenido va por debajo de la barra (el mapa se ve a través de ella); cada pantalla deja
+        // ese hueco al final de su lista con LocalBottomBar.
+        val bar = 80.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+            CompositionLocalProvider(LocalBottomBar provides bar) { screen() }
+            NavigationBar(Modifier.align(Alignment.BottomCenter).glass(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), alpha = 0.82f),
+                containerColor = Color.Transparent, tonalElevation = 0.dp) {
                 Tab.entries.forEach { t ->
                     NavigationBarItem(selected = tab == t.ordinal, onClick = { tab = t.ordinal },
                         icon = { Icon(t.icon, null) }, label = { Text(t.label) })
                 }
             }
-        }) { pad -> content(Modifier.fillMaxSize().padding(bottom = pad.calculateBottomPadding())) }
+        }
     }
 }
+
+/** Lo que tapa la barra de navegación translúcida por abajo. */
+val LocalBottomBar = compositionLocalOf { 0.dp }

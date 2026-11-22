@@ -8,13 +8,14 @@ Es la versión para Android de [ZeroGPS](https://github.com/baltamir1978/ZeroGPS
 LoRa-1262 para el M5Stack Cardputer Zero, escrita desde cero en Kotlin + Jetpack Compose. Funciona
 sin Google Play (GrapheneOS): la posición sale del GPS del móvil con `LocationManager`.
 
-**Estado: 0.1.2** (22-nov-2026). Ver `CLAUDE.md`.
+**Estado: 0.2.0** (22-nov-2026). Ver `CLAUDE.md`.
 
 ## Qué hace
 
 - **Mapa**: teselas del IGN (botón de capas: Topográfico → Satélite → IGN Base), tu posición con
   el círculo de precisión y la flecha del rumbo, el track que se graba (rojo) y el que abras desde
-  Tracks (morado). Sigue tu posición hasta que mueves el mapa; el botón de la diana lo recentra.
+  Tracks (morado). Sigue tu posición hasta que mueves el mapa; el botón de la diana lo recentra. La barra
+  flotante enseña el nivel de zoom (z5–z19, el mismo de la descarga).
   Recuerda dónde lo dejaste y la última posición. «Online / Sin red» decide si se bajan las
   teselas que falten o sólo se ve lo guardado.
 - **Satélites**: el cielo con los satélites por constelación (GPS, Galileo, GLONASS, BeiDou…;

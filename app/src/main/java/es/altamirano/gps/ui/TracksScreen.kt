@@ -16,9 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
@@ -29,7 +27,6 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -49,6 +46,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -84,28 +88,36 @@ fun TracksScreen() {
     }
 
     val side = gutter()
-    LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(side, 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Tracks", fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalBottomBar.current + 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Header("Tracks", when (list.size) { 0 -> "Graba o importa un GPX"; 1 -> "1 guardado"; else -> "${list.size} guardados" }, Icons.Filled.Route, side)
+        }
+        item {
+            val recordingBrush = Brush.linearGradient(listOf(MapColors.recording, Color(0xFFFF7043)))
+            Box(Modifier.padding(horizontal = side).fillMaxWidth().clip(CardShape)
+                .then(if (rec.active) Modifier.background(recordingBrush) else Modifier.background(MaterialTheme.colorScheme.primaryContainer))) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (rec.active) {
                         var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
                         LaunchedEffect(Unit) { while (true) { delay(1000); now = SystemClock.elapsedRealtime() } }
-                        Text("Grabando", fontWeight = FontWeight.Bold, color = MapColors.recording)
-                        Text("${Geo.formatDistance(rec.lengthM)} · ${Geo.formatDuration((now - rec.startedElapsed) / 1000)} · ${rec.points.size} puntos" +
-                            " · ↑ ${Geo.formatDistance(Geo.ascentM(rec.points))}")
-                        Text("Sigue con la pantalla apagada. Se guarda cada minuto.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = { Recording.stop(context) }, colors = ButtonDefaults.buttonColors(containerColor = MapColors.recording)) {
-                            Icon(Icons.Filled.Stop, null); Text("  Parar y guardar")
+                        Text("Grabando", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.White)
+                        Text(Geo.formatDistance(rec.lengthM), fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("${Geo.formatDuration((now - rec.startedElapsed) / 1000)} · ${rec.points.size} puntos · ↑ ${Geo.formatDistance(Geo.ascentM(rec.points))}",
+                            color = Color.White)
+                        Text("Sigue con la pantalla apagada. Se guarda cada minuto.", fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f))
+                        Button(onClick = { Recording.stop(context) }, colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = MapColors.recording)) {
+                            Icon(Icons.Filled.Stop, null); Text("  Parar y guardar", fontWeight = FontWeight.SemiBold)
                         }
                     } else {
-                        Text("Graba por dónde vas en un GPX. Un punto cada 5 m (o cada 30 s si vas despacio); las posiciones con más de 30 m de error no entran.",
-                            fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Graba por dónde vas", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("Un punto cada 5 m (o cada 30 s si vas despacio); las posiciones con más de 30 m de error no entran.",
+                            fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(onClick = {
                                 if (Build.VERSION.SDK_INT >= 33) notifications.launch(Manifest.permission.POST_NOTIFICATIONS) else Recording.start(context)
-                            }) { Icon(Icons.Filled.FiberManualRecord, null, tint = Color(0xFFFFCDD2)); Text("  Grabar") }
+                            }, colors = ButtonDefaults.buttonColors(containerColor = MapColors.recording, contentColor = Color.White)) {
+                                Icon(Icons.Filled.FiberManualRecord, null); Text("  Grabar", fontWeight = FontWeight.SemiBold)
+                            }
                             OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }) { Icon(Icons.Filled.FileOpen, null); Text("  Importar GPX") }
                         }
                     }
@@ -113,11 +125,11 @@ fun TracksScreen() {
             }
         }
         if (list.isEmpty()) item {
-            Text("Todavía no hay tracks guardados.", Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Todavía no hay tracks guardados.", Modifier.padding(horizontal = side, vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        items(list, key = { it.file.name }) { t ->
+        itemsIndexed(list, key = { _, t -> t.file.name }) { i, t ->
             val recordingThis = rec.active && rec.file == t.file
-            TrackRow(t, recordingThis, onOpen = { Tracks.open(t.file) }, onDelete = { toDelete = t }, onShare = {
+            TrackRow(Modifier.padding(horizontal = side), i, t, recordingThis, onOpen = { Tracks.open(t.file) }, onDelete = { toDelete = t }, onShare = {
                 val uri = FileProvider.getUriForFile(context, context.packageName + ".files", t.file)
                 val send = Intent(Intent.ACTION_SEND).setType("application/gpx+xml").putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -138,11 +150,17 @@ fun TracksScreen() {
 private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm")
 
 @Composable
-private fun TrackRow(t: TrackInfo, recording: Boolean, onOpen: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit) {
+private fun TrackRow(modifier: Modifier, index: Int, t: TrackInfo, recording: Boolean, onOpen: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth().clickable(enabled = t.points > 0, onClick = onOpen)) {
-        Row(Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+    // Cada fila con un color del tema para el icono, por turnos: más vivo que una lista gris.
+    val c = MaterialTheme.colorScheme
+    val (bg, fg) = listOf(c.primary to c.onPrimary, c.tertiary to c.onTertiary, c.secondary to c.onSecondary)[index % 3]
+    Box(modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(c.surfaceContainerHigh).clickable(enabled = t.points > 0, onClick = onOpen)) {
+        Row(Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(if (recording) MapColors.recording else bg), contentAlignment = Alignment.Center) {
+                Icon(if (recording) Icons.Filled.FiberManualRecord else Icons.Filled.Route, null, tint = if (recording) Color.White else fg)
+            }
+            Column(Modifier.weight(1f).padding(start = 14.dp)) {
                 Text(t.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val parts = buildList {
                     add(Geo.formatDistance(t.lengthM))

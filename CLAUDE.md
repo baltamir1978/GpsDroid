@@ -31,9 +31,24 @@ proyectos; aquí va lo propio de esta.
 - **Mapa** (`ui/MapScreen`): `MapView` en `AndroidView`, `isTilesScaledToDpi` (por eso el zoom
   máximo es el de la capa: ya se ve ampliado), overlay propio para la posición, `Polyline` para los
   tracks, escala y atribución. Seguir se quita al arrastrar (`ACTION_MOVE`).
-- Interfaz sólo en español (como ZeroGPS). Colores del sistema (Material You).
+- Interfaz sólo en español (como ZeroGPS). Material 3 Expressive con los colores del sistema.
 
 ## Estado
+
+**0.2.0 (22-nov-2026): aspecto Material 3 Expressive.** Lo pidió Bruno («guías de diseño de
+Android 17, algo más colorido y translúcido»). material3 1.5.0-rc01 (como VideoDroid) con
+`MaterialExpressiveTheme` + `MotionScheme.expressive()` y colores del sistema. El mapa ocupa toda
+la pantalla y la barra de navegación flota encima en «cristal» (`Modifier.glass` en `ui/Theme.kt`:
+superficie translúcida tintada + filo claro + sombra; no hay desenfoque de lo de detrás). En el
+mapa: píldora de posición arriba (indicador de carga mientras busca), píldora roja que late al
+grabar, `HorizontalFloatingToolbar` abajo (capa, red, seguir, **nivel de zoom** —lo pidió Bruno—
+y el botón de grabar como FAB) y la atribución del IGN encima; la escala pasa arriba a la
+derecha. Las demás pestañas: `Header` con degradado primario → terciario, tarjetas tonales de
+esquinas grandes, cielo de noche con halo en los satélites usados, leyenda en píldoras de color,
+tarjeta de grabación en degradado rojo, filas de tracks con icono de color por turnos, progreso
+ondulado (`LinearWavyProgressIndicator`). Además (0.1.3) cada pestaña recuerda su estado al
+cambiar (`rememberSaveableStateHolder`). Pantallas que no llegan bajo la barra: `LocalBottomBar`.
+**Sin probar en el móvil** el aspecto nuevo.
 
 **0.1.2 (22-nov-2026): las descargas ya no «fallan».** `SqlTileWriter.saveFile` de osmdroid
 6.1.20 **devuelve siempre `false`** aunque guarde (su bytecode acaba en `iconst_0; ireturn`): cada
@@ -50,7 +65,7 @@ errores. Clave nueva `gps-release` (copiada a `~/Documentos/ClavesAndroid`). Ins
 móvil por adb. **Visto en el móvil (22-nov-2026)**: el mapa pinta las teselas del IGN (las tres
 capas), escala y atribución; descarga de zonas. **Sin probar en el móvil**: grabar un track
 (y que siga con la pantalla apagada), abrir/compartir/importar, la pantalla de satélites con fix.
-Ojo: cambiar de pestaña olvida lo elegido en Offline (`rememberSaveable` dentro de un `when`).
+
 
 Pendiente / ideas: comprobar en el móvil que se pintan las teselas del IGN, que la grabación sigue
 con la pantalla apagada (GrapheneOS no mata servicios en primer plano, pero la optimización de

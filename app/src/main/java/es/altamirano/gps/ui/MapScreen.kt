@@ -25,26 +25,53 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import es.altamirano.gps.core.MapLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.HorizontalFloatingToolbar
+import androidx.compose.material3.FloatingToolbarDefaults
+import androidx.compose.material.icons.filled.Terrain
+import androidx.compose.material.icons.filled.SatelliteAlt
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -61,11 +88,13 @@ import es.altamirano.gps.data.Recording
 import es.altamirano.gps.data.Tiles
 import es.altamirano.gps.data.Tracks
 import kotlinx.coroutines.delay
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.CopyrightOverlay
 import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.ScaleBarOverlay
@@ -79,6 +108,7 @@ fun MapScreen() {
     var online by remember { mutableStateOf(prefs.online) }
     // Seguir la posición: se quita al mover el mapa con el dedo y se vuelve con el botón.
     var follow by remember { mutableStateOf(prefs.view == null) }
+    var zoom by remember { mutableDoubleStateOf(prefs.view?.third ?: 6.0) }
 
     val location by Gps.location.collectAsState()
     val rec by Recording.state.collectAsState()
@@ -91,6 +121,8 @@ fun MapScreen() {
     }
 
     val density = context.resources.displayMetrics.density
+    val topInsetPx = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
+    val bottomBar = LocalBottomBar.current
     val openedLine = remember { trackLine(MapColors.opened.toArgb(), 5f * density) }
     val recLine = remember { trackLine(MapColors.recording.toArgb(), 4f * density) }
     val position = remember { PositionOverlay(density) }
@@ -113,9 +145,15 @@ fun MapScreen() {
             overlays += openedLine
             overlays += recLine
             overlays += position
-            overlays += ScaleBarOverlay(this).apply { setAlignBottom(true); setScaleBarOffset((12 * density).toInt(), (12 * density).toInt()) }
-            overlays += CopyrightOverlay(context).apply { setAlignRight(true) }
+            // La escala arriba a la derecha: abajo la taparían la barra flotante y la de navegación.
+            overlays += ScaleBarOverlay(this).apply {
+                setAlignRight(true); setScaleBarOffset((16 * density).toInt(), (topInsetPx + 14 * density).toInt())
+            }
             setOnTouchListener { _, e -> if (e.actionMasked == MotionEvent.ACTION_MOVE) follow = false; false }
+            addMapListener(object : MapListener {
+                override fun onScroll(event: ScrollEvent?) = false
+                override fun onZoom(event: ZoomEvent?): Boolean { zoom = zoomLevelDouble; return false }
+            })
         }
     }
     DisposableEffect(Unit) {
@@ -132,6 +170,7 @@ fun MapScreen() {
         mapView.setTileSource(Tiles.sources.getValue(layer))
         mapView.maxZoomLevel = layer.maxZoom.toDouble()
         if (mapView.zoomLevelDouble > layer.maxZoom) mapView.controller.setZoom(layer.maxZoom.toDouble())
+        zoom = mapView.zoomLevelDouble
     }
     LaunchedEffect(online) { prefs.online = online; mapView.setUseDataConnection(online) }
     LaunchedEffect(Unit) { mapView.keepScreenOn = prefs.keepScreenOn }
@@ -175,75 +214,107 @@ fun MapScreen() {
     Box(Modifier.fillMaxSize()) {
         AndroidView({ mapView }, Modifier.fillMaxSize())
 
-        // Arriba: dónde estás y, si se graba o hay un track abierto, su resumen.
-        Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            InfoChip(location)
-            if (rec.active) RecordingChip(rec.lengthM, rec.startedElapsed)
+        // Arriba: dónde estás y, si se graba o hay un track abierto, su resumen. En cristal.
+        Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(12.dp).widthIn(max = 300.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            InfoPill(location)
+            AnimatedVisibility(rec.active, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                RecordingPill(rec.lengthM, rec.startedElapsed)
+            }
             opened?.let { t ->
-                Row(Modifier.clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f)).padding(start = 10.dp),
+                Row(Modifier.glass(RoundedCornerShape(50), tint = MapColors.opened, alpha = 0.85f).padding(start = 14.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(MapColors.opened))
-                    Text(" ${t.name} · ${Geo.formatDistance(Geo.lengthM(t.points))}", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false))
-                    IconButton(onClick = { Tracks.close() }, Modifier.size(36.dp)) { Icon(Icons.Filled.Close, "Cerrar el track", Modifier.size(18.dp)) }
+                    Icon(Icons.Filled.Route, null, Modifier.size(16.dp), tint = Color.White)
+                    Text("  ${t.name} · ${Geo.formatDistance(Geo.lengthM(t.points))}", fontSize = 13.sp, color = Color.White, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    IconButton(onClick = { Tracks.close() }, Modifier.size(36.dp)) { Icon(Icons.Filled.Close, "Cerrar el track", Modifier.size(18.dp), tint = Color.White) }
                 }
             }
         }
 
-        // A la derecha: capa, online, seguir y grabar.
-        Column(Modifier.align(Alignment.BottomEnd).padding(12.dp).padding(bottom = 28.dp), horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SmallFloatingActionButton(onClick = { layer = layer.next() }) {
-                Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Layers, "Cambiar de mapa"); Text(" ${layer.label}", fontSize = 13.sp)
+        // Abajo: la atribución del IGN (la pide la licencia) y la barra flotante de Expressive.
+        Column(Modifier.align(Alignment.BottomCenter).padding(bottom = bottomBar + 10.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HorizontalFloatingToolbar(
+                expanded = true,
+                colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(
+                    toolbarContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.88f),
+                    fabContainerColor = if (rec.active) MapColors.recording else MaterialTheme.colorScheme.tertiaryContainer,
+                    fabContentColor = if (rec.active) Color.White else MapColors.recording,
+                ),
+                floatingActionButton = {
+                    FloatingToolbarDefaults.VibrantFloatingActionButton(onClick = {
+                        if (rec.active) Recording.stop(context)
+                        else if (Build.VERSION.SDK_INT >= 33) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        else Recording.start(context)
+                    }, containerColor = if (rec.active) MapColors.recording else MaterialTheme.colorScheme.tertiaryContainer) {
+                        if (rec.active) Icon(Icons.Filled.Stop, "Parar la grabación", tint = Color.White)
+                        else Icon(Icons.Filled.FiberManualRecord, "Grabar track", tint = MapColors.recording)
+                    }
+                },
+            ) {
+                TextButton(onClick = { layer = layer.next() }) {
+                    Icon(layerIcon(layer), null, Modifier.size(20.dp)); Text(" ${layer.label}", fontWeight = FontWeight.SemiBold)
                 }
-            }
-            SmallFloatingActionButton(onClick = { online = !online }) {
-                if (online) Text("Online", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp))
-                else Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.CloudOff, null, Modifier.size(18.dp)); Text(" Sin red", fontSize = 12.sp)
+                IconButton(onClick = { online = !online }) {
+                    Icon(if (online) Icons.Filled.Cloud else Icons.Filled.CloudOff, if (online) "Usando la red" else "Sin red")
                 }
+                IconToggleButton(checked = follow, onCheckedChange = { follow = it }) {
+                    Icon(if (follow) Icons.Filled.MyLocation else Icons.Filled.LocationSearching, "Seguir mi posición")
+                }
+                Text("z%d".format(zoom.toInt()) + if (zoom >= layer.maxZoom - 0.01) "+" else "", fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp))
             }
-            SmallFloatingActionButton(onClick = { follow = true }) {
-                Icon(if (follow) Icons.Filled.MyLocation else Icons.Filled.LocationSearching, "Seguir mi posición")
-            }
-            FloatingActionButton(onClick = {
-                if (rec.active) Recording.stop(context)
-                else if (Build.VERSION.SDK_INT >= 33) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                else Recording.start(context)
-            }, containerColor = if (rec.active) MapColors.recording else MaterialTheme.colorScheme.primaryContainer) {
-                if (rec.active) Icon(Icons.Filled.Stop, "Parar la grabación")
-                else Icon(Icons.Filled.FiberManualRecord, "Grabar track", tint = MapColors.recording)
-            }
+            Text(MapLayer.ATTRIBUTION, fontSize = 10.sp, color = Color.Black.copy(alpha = 0.75f),
+                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 1.dp))
+        }
+    }
+}
+
+private fun layerIcon(l: MapLayer) = when (l) {
+    MapLayer.TOPO -> Icons.Filled.Terrain
+    MapLayer.ORTHO -> Icons.Filled.SatelliteAlt
+    MapLayer.BASE -> Icons.Filled.Map
+}
+
+@Composable
+private fun InfoPill(loc: Location?) {
+    val fresh = Gps.isFresh(loc)
+    val (title, detail) = when {
+        !Gps.hasPermission() -> "Sin permiso de ubicación" to null
+        !Gps.isProviderEnabled() -> "La ubicación está desactivada" to null
+        loc == null || !fresh -> "Buscando satélites…" to null
+        else -> Geo.formatLatLon(loc.latitude, loc.longitude) to buildList {
+            if (loc.hasAltitude()) add("%.0f m".format(loc.altitude))
+            if (loc.hasAccuracy()) add("±%.0f m".format(loc.accuracy))
+            if (loc.hasSpeed() && loc.speed > 0.7f) add("%.1f km/h".format(loc.speed * 3.6f))
+        }.joinToString("  ·  ")
+    }
+    Row(Modifier.glass().padding(start = 8.dp, end = 14.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(if (fresh) MapColors.position else MaterialTheme.colorScheme.tertiary),
+            contentAlignment = Alignment.Center) {
+            if (fresh) Icon(Icons.Filled.GpsFixed, null, Modifier.size(18.dp), tint = Color.White)
+            else LoadingIndicator(Modifier.size(26.dp), color = MaterialTheme.colorScheme.onTertiary)
+        }
+        Column(Modifier.padding(start = 10.dp)) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            detail?.takeIf { it.isNotEmpty() }?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
 
 @Composable
-private fun InfoChip(loc: Location?) {
-    val text = when {
-        !Gps.hasPermission() -> "Sin permiso de ubicación"
-        !Gps.isProviderEnabled() -> "La ubicación está desactivada"
-        loc == null || !Gps.isFresh(loc) -> "Buscando satélites…"
-        else -> buildString {
-            append(Geo.formatLatLon(loc.latitude, loc.longitude))
-            if (loc.hasAltitude()) append("\n%.0f m".format(loc.altitude))
-            if (loc.hasAccuracy()) append(if (loc.hasAltitude()) "  ·  ±%.0f m".format(loc.accuracy) else "\n±%.0f m".format(loc.accuracy))
-            if (loc.hasSpeed() && loc.speed > 0.7f) append("  ·  %.1f km/h".format(loc.speed * 3.6f).replace('.', ','))
-        }
-    }
-    Text(text, fontSize = 13.sp, lineHeight = 17.sp,
-        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f)).padding(10.dp, 6.dp))
-}
-
-@Composable
-private fun RecordingChip(lengthM: Double, started: Long) {
-    var now by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
+private fun RecordingPill(lengthM: Double, started: Long) {
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = SystemClock.elapsedRealtime() } }
-    Row(Modifier.clip(RoundedCornerShape(10.dp)).background(MapColors.recording).padding(10.dp, 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Filled.FiberManualRecord, null, Modifier.size(12.dp), tint = androidx.compose.ui.graphics.Color.White)
-        Text("  ${Geo.formatDistance(lengthM)}  ·  ${Geo.formatDuration((now - started) / 1000)}", color = androidx.compose.ui.graphics.Color.White,
-            fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    // El punto late mientras se graba.
+    val pulse by rememberInfiniteTransition(label = "rec").animateFloat(0.35f, 1f,
+        infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "pulse")
+    Row(Modifier.glass(RoundedCornerShape(50), tint = MapColors.recording, alpha = 0.88f).padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(Color.White.copy(alpha = pulse)))
+        Text("  Grabando  ·  ${Geo.formatDistance(lengthM)}  ·  ${Geo.formatDuration((now - started) / 1000)}", color = Color.White,
+            fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
