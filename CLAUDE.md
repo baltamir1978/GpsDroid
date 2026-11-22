@@ -48,7 +48,7 @@ esquinas grandes, cielo de noche con halo en los satélites usados, leyenda en p
 tarjeta de grabación en degradado rojo, filas de tracks con icono de color por turnos, progreso
 ondulado (`LinearWavyProgressIndicator`). Además (0.1.3) cada pestaña recuerda su estado al
 cambiar (`rememberSaveableStateHolder`). Pantallas que no llegan bajo la barra: `LocalBottomBar`.
-**Sin probar en el móvil** el aspecto nuevo.
+**Visto en el móvil y aprobado por Bruno (22-nov-2026)** («me gusta»).
 
 **0.1.2 (22-nov-2026): las descargas ya no «fallan».** `SqlTileWriter.saveFile` de osmdroid
 6.1.20 **devuelve siempre `false`** aunque guarde (su bytecode acaba en `iconst_0; ireturn`): cada
