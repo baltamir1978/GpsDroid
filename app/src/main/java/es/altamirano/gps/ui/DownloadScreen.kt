@@ -1,0 +1,199 @@
+package es.altamirano.gps.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RangeSlider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import es.altamirano.common.ui.gutter
+import es.altamirano.gps.core.BBox
+import es.altamirano.gps.core.MapLayer
+import es.altamirano.gps.core.OfflineZone
+import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.Prefs
+import es.altamirano.gps.data.Tiles
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
+
+private val RADII = listOf(1.0, 2.0, 5.0, 10.0, 20.0)
+
+/**
+ * Bajar una zona para cuando no haya cobertura (como «Mapas offline» de ZeroGPS): alrededor del
+ * centro del mapa o de tu posición, o una sierra entera; uno de los mapas o los tres; de qué zoom a
+ * qué zoom. Antes de empezar dice cuántas teselas son, lo que ocupará y el espacio libre.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun DownloadScreen() {
+    val context = LocalContext.current
+    val prefs = remember { Prefs(context) }
+    val dl by Tiles.download.collectAsState()
+
+    // Dónde: 0 = centro del mapa, 1 = mi posición, 2+ = zona ya hecha.
+    var where by rememberSaveable { mutableIntStateOf(0) }
+    var radius by rememberSaveable { mutableStateOf(5.0) }
+    // Qué mapa: índice de MapLayer o -1 = los tres (lo que pidió Bruno por defecto en ZeroGPS).
+    var which by rememberSaveable { mutableIntStateOf(-1) }
+    var zmin by rememberSaveable { mutableIntStateOf(OfflineZone.ZOOM_MIN) }
+    var zmax by rememberSaveable { mutableIntStateOf(OfflineZone.ZOOM_MAX) }
+    var online by remember { mutableStateOf(prefs.online) }
+    var keepOn by remember { mutableStateOf(prefs.keepScreenOn) }
+    var purge by remember { mutableStateOf<MapLayer?>(null) }
+
+    val here = Gps.location.collectAsState().value
+    val center: Pair<Double, Double>? = when (where) {
+        0 -> prefs.view?.let { it.first to it.second } ?: prefs.last
+        1 -> here?.let { it.latitude to it.longitude } ?: prefs.last
+        else -> null
+    }
+    val box: BBox? = if (where >= 2) OfflineZone.PRESETS[where - 2].second
+        else center?.let { OfflineZone.bboxAround(it.first, it.second, radius) }
+    val layers = if (which < 0) MapLayer.entries else listOf(MapLayer.entries[which])
+    val (tiles, bytes) = box?.let { OfflineZone.plan(it, zmin, zmax, layers) } ?: (0L to 0L)
+    val free = Tiles.cacheDir.apply { mkdirs() }.usableSpace
+    val tooMany = tiles > OfflineZone.MAX_TILES
+
+    val counts by produceState(emptyMap<MapLayer, Long>(), dl.running) {
+        value = withContext(Dispatchers.IO) { MapLayer.entries.associateWith { Tiles.countFor(it) } }
+    }
+    val dbBytes by produceState(0L, dl.running, purge) { value = withContext(Dispatchers.IO) { Tiles.cacheBytes() } }
+
+    val side = gutter()
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = side, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Mapas offline", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+
+        Section("Zona") {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(where == 0, { where = 0 }, { Text("Centro del mapa") })
+                FilterChip(where == 1, { where = 1 }, { Text("Mi posición") })
+            }
+            if (where < 2) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RADII.forEach { r -> FilterChip(radius == r, { radius = r }, { Text("${r.roundToInt()} km") }) }
+            }
+            if (where < 2 && center == null) Text("Sin posición todavía: abre el mapa o espera al GPS.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+            Text("O una zona entera:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OfflineZone.PRESETS.forEachIndexed { i, (name, _) -> FilterChip(where == i + 2, { where = i + 2 }, { Text(name) }) }
+            }
+        }
+
+        Section("Mapa") {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(which < 0, { which = -1 }, { Text("Los tres") })
+                MapLayer.entries.forEachIndexed { i, l -> FilterChip(which == i, { which = i }, { Text(l.label) }) }
+            }
+        }
+
+        Section("Zoom") {
+            val top = layers.maxOf { it.maxZoom }
+            Text("De z$zmin a " + (if (zmax >= top) "máx. (" + layers.joinToString(" / ") { "z${it.maxZoom}" } + ")" else "z$zmax"), fontSize = 14.sp)
+            RangeSlider(value = zmin.toFloat()..zmax.coerceAtMost(top).toFloat(),
+                onValueChange = { zmin = it.start.roundToInt(); zmax = it.endInclusive.roundToInt().let { e -> if (e >= top) OfflineZone.ZOOM_MAX else e } },
+                valueRange = OfflineZone.ZOOM_MIN.toFloat()..top.toFloat(), steps = top - OfflineZone.ZOOM_MIN - 1)
+            Text("z12 se ve la comarca, z15 los caminos, z17 cada casa; cada zoom más multiplica por cuatro.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (dl.running) {
+                    Text("Descargando" + (dl.layer?.let { " · ${it.label}" } ?: ""), fontWeight = FontWeight.Bold)
+                    LinearProgressIndicator(progress = { if (dl.total > 0) dl.done.toFloat() / dl.total else 0f }, Modifier.fillMaxWidth())
+                    Text("${OfflineZone.formatCount(dl.done.toLong())} de ${OfflineZone.formatCount(dl.total.toLong())} teselas" +
+                        if (dl.failed > 0) " · ${dl.failed} fallos" else "", fontSize = 14.sp)
+                    Text("Mantén la app abierta hasta que acabe.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = { Tiles.cancel() }) { Text("Cancelar") }
+                } else {
+                    Text("${OfflineZone.formatCount(tiles)} teselas · unos ${OfflineZone.formatBytes(bytes)}", fontWeight = FontWeight.Bold)
+                    Text("Libre en el móvil: ${OfflineZone.formatBytes(free)}", fontSize = 14.sp)
+                    if (tooMany) Text("Pasa del tope de ${OfflineZone.formatCount(OfflineZone.MAX_TILES)} teselas por descarga: baja el zoom máximo o el radio. (El IGN es un servicio público: nada de bajarlo entero.)",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                    if (bytes > free) Text("No cabe.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                    dl.message?.let { Text(it, fontSize = 13.sp) }
+                    Button(onClick = { box?.let { Tiles.start(it, zmin, zmax, layers) } },
+                        enabled = box != null && tiles > 0 && !tooMany && bytes < free && online) { Text("Descargar") }
+                    if (!online) Text("Activa «Usar la red» para descargar.", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                    Text("Lo que ya está guardado no se vuelve a bajar: repetir una descarga la reanuda.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        Section("Guardado en el móvil · ${OfflineZone.formatBytes(dbBytes)}") {
+            MapLayer.entries.forEach { l ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${l.label}: ${OfflineZone.formatCount(counts[l] ?: 0)} teselas", Modifier.weight(1f), fontSize = 14.sp)
+                    TextButton(onClick = { purge = l }, enabled = !dl.running && (counts[l] ?: 0) > 0) { Text("Vaciar") }
+                }
+            }
+            Text("Incluye lo que se va viendo en el mapa, no sólo las descargas.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        Section("Ajustes") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Usar la red", fontSize = 15.sp)
+                    Text("Bajar las teselas que falten al mover el mapa. Apagado, sólo se ve lo guardado (no gasta datos).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(online, { online = it; prefs.online = it })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Pantalla siempre encendida en el mapa", fontSize = 15.sp)
+                    Text("Para llevar el móvil en el soporte de la bici o el coche. Gasta batería.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(keepOn, { keepOn = it; prefs.keepScreenOn = it })
+            }
+        }
+        Text("Mapas: ${MapLayer.ATTRIBUTION} (CC BY 4.0).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+
+    purge?.let { l ->
+        AlertDialog(onDismissRequest = { purge = null },
+            title = { Text("¿Vaciar ${l.label}?") },
+            text = { Text("Se borran todas las teselas guardadas de este mapa, también las de las zonas descargadas.") },
+            confirmButton = { TextButton(onClick = { Tiles.purge(l); purge = null }) { Text("Vaciar") } },
+            dismissButton = { TextButton(onClick = { purge = null }) { Text("Cancelar") } })
+    }
+}
+
+@Composable
+private fun Section(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+        content()
+    }
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Qué sale del móvil en una copia de seguridad (Seedvault en GrapheneOS) o al pasar a otro móvil:
+  los ajustes y los tracks. Las teselas van en noBackupFilesDir y quedan fuera siempre: pueden
+  ser gigas y se vuelven a bajar.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="." />
+        <include domain="file" path="tracks/" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="." />
+        <include domain="file" path="tracks/" />
+    </device-transfer>
+</data-extraction-rules>
