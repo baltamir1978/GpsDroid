@@ -70,7 +70,7 @@ con gpsdroid»): las ideas que quedaban.
   eran `HTTP 502` del IGN, pasajeros; repetir reanuda), grabar un track y su ficha (423 m, ↑ 95 m,
   como lo mandado). Ojo al probar con `adb emu geo fix`: las latitudes con muchos decimales
   (`40.785799999999995`) la consola las lee mal y el track sale en zigzag; redondear a 6.
-  **Sin probar en el móvil** (no estaba por adb). APK en `~/Documentos/GpsDroid-0.3.0.apk`.
+  **Probada en el móvil por Bruno (24-nov-2026)**: «funciona perfectamente». APK en `~/Documentos/GpsDroid-0.3.0.apk`.
 
 **0.2.1 (22-nov-2026): paleta verde fija.** Con los colores del fondo de pantalla (Material You)
 el móvil de Bruno daba una paleta gris y lo seleccionado (chips de Offline, interruptores) no se
@@ -104,12 +104,10 @@ desplazarse (`statusBarsPadding` iba dentro del scroll).
 
 **0.1.0 (22-nov-2026): primera versión.** Mapa con las tres capas del IGN, satélites, grabar /
 abrir / compartir / importar / borrar tracks y descarga de zonas. 8 pruebas en verde y lint sin
-errores. Clave nueva `gps-release` (copiada a `~/Documentos/ClavesAndroid`). Instalada en el
+errores. Clave nueva `gps-release` (copiada a `~/Documentos/Software/ClavesAndroid`). Instalada en el
 móvil por adb. **Visto en el móvil (22-nov-2026)**: el mapa pinta las teselas del IGN (las tres
 capas), escala y atribución; descarga de zonas. **Sin probar en el móvil**: grabar un track
 (y que siga con la pantalla apagada), abrir/compartir/importar, la pantalla de satélites con fix.
 
 
-Pendiente: en el móvil, el híbrido, la ficha de un track de verdad, grabar con la pantalla apagada
-(con y sin la optimización de batería), abrir/compartir/importar y la pantalla de satélites con fix.
 Ideas, si hicieran falta: waypoints, pintar en el mapa el punto marcado en el perfil.
