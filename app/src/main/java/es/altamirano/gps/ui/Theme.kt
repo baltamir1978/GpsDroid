@@ -44,4 +44,6 @@ object MapColors {
     val opened = Color(0xFF8E24AA)
     val position = Color(0xFF1E88E5)
     val stale = Color(0xFF9E9E9E)
+    val waypoint = Color(0xFF00897B)
+    val target = Color(0xFFF57C00)
 }

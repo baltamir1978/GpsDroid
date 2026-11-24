@@ -91,7 +91,11 @@ class TrackService : Service() {
         if (scope != null) return
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Grabación de tracks", NotificationManager.IMPORTANCE_LOW))
-        startForeground(NOTIFICATION_ID, notification("Esperando al GPS…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        // Desde el coche, con la app sin ventana en el móvil, Android puede negarlo: mejor no grabar que caerse.
+        val ok = runCatching {
+            startForeground(NOTIFICATION_ID, notification("Esperando al GPS…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        }.isSuccess
+        if (!ok) { stopSelf(); return }
 
         val now = LocalDateTime.now()
         name = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))

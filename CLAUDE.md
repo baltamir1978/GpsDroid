@@ -30,11 +30,46 @@ proyectos; aquí va lo propio de esta.
   la vez, salta lo guardado y sin caducar (repetir = reanudar), comprueba `FF D8`, para con poco
   espacio o si un zoom entero falla.
 - **Mapa** (`ui/MapScreen`): `MapView` en `AndroidView`, `isTilesScaledToDpi` (por eso el zoom
-  máximo es el de la capa: ya se ve ampliado), overlay propio para la posición, `Polyline` para los
-  tracks, escala y atribución. Seguir se quita al arrastrar (`ACTION_MOVE`).
+  máximo es el de la capa: ya se ve ampliado), escala y atribución. Lo de encima de las teselas
+  (rótulos, tracks, puntos, posición) está en `ui/MapScene`, compartido con el coche (`car/`). Seguir se quita al arrastrar (`ACTION_MOVE`).
 - Interfaz sólo en español (como ZeroGPS). Material 3 Expressive con los colores del sistema.
 
 ## Estado
+
+**0.4.0 (24-nov-2026): Android Auto y puntos.** Lo pidió Bruno («android auto a la app de mapas
+ign» y «poder guardar puntos en el mapa y que me diga dirección y distancia»).
+- **Puntos** (`core/Waypoints.kt`: `Waypoint`, `Direction`, `WaypointGpx`; `data/Waypoints`;
+  `ui/WaypointsUi.kt`): todos en un GPX, `files/puntos/puntos.gpx` (`<wpt>`, se reescribe entero
+  con temporal + rename; se comparte por el `FileProvider`). Los `id` sólo valen en la sesión; el
+  **destino** se recuerda en `Prefs` por sus coordenadas. Guardar: pulsación larga en el mapa o el
+  botón verde (tu posición, con altitud); nombre «Punto N» ya escrito y seleccionado. Tocar una
+  chincheta abre su ficha (distancia y rumbo, ir hacia aquí / dejar de ir, renombrar, abrir en otra
+  app con `geo:`, borrar). Con destino: línea discontinua naranja desde tu posición y una píldora
+  arriba con una flecha que gira con la **brújula** (`ui/Compass.kt`, `TYPE_ROTATION_VECTOR`, sólo
+  mientras se ve; si vas a más de 1,5 m/s manda el rumbo del GPS), «1,2 km al NE · a tu derecha»
+  (ocho sectores, `Direction.relative`) y «Has llegado» a menos de 15 m. En Tracks, sección
+  «Puntos» (los más cerca primero; enciende el GPS mientras se ve si hay puntos). Importar un GPX
+  añade sus `<wpt>` (un GPX sólo con puntos ya no da error).
+- **Android Auto** (`car/`, `androidx.car.app:app` 1.7.0, la última estable): categoría
+  **NAVIGATION**, la única que puede pintar un mapa propio (permisos `NAVIGATION_TEMPLATES` y
+  `ACCESS_SURFACE`, `minCarApiLevel` 2). `CarMapRenderer` crea un `VirtualDisplay` sobre la
+  `Surface` del coche y un `Presentation` con un `MapView` normal: mismas teselas (offline
+  incluidas), estilos y overlays que el móvil, que para eso pasaron a `ui/MapScene.kt`. El centro
+  va al centro del área visible (`setMapCenterOffset`); de noche (`isDarkMode`) las teselas se
+  oscurecen. `NavigationTemplate`: tira de acciones (capa, lista de puntos, guardar punto aquí,
+  grabar/parar) y tira del mapa (mover, +, −, seguir); arrastrar y pellizcar con `onScroll`/
+  `onScale`. La tarjeta (`MessageInfo`) sale con destino o grabando: flecha (mapa con el norte
+  arriba; en marcha, relativa a tu rumbo), distancia redondeada a 10 m y a qué mano queda; la
+  plantilla se rehace como mucho cada 2 s. `PointsCarScreen`: lista por distancia, tocar = destino.
+  `HostValidator`: cualquiera en debug, en release la lista de la librería. Grabar desde el coche
+  puede no dejarse (servicio en primer plano sin la app a la vista): `TrackService` ya no se cae si
+  `startForeground` falla, y el coche lo dice.
+- 15 pruebas (3 nuevas: rumbo y punto cardinal, a qué mano, GPX de puntos) y lint sin errores.
+  **Probado en el emulador con la release**: abre; guardar con el botón y con pulsación larga;
+  la lista de Tracks por distancia; la ficha; «Ir hacia aquí» y la píldora («208,9 km al N · de
+  frente»); el `CarAppService` queda registrado con la categoría NAVIGATION. **Sin probar en el
+  coche** (aquí no hay Android Auto ni DHU) **ni en el móvil** (brújula de verdad, renombrar,
+  borrar, compartir, importar `<wpt>`).
 
 **0.3.0 (24-nov-2026): híbrido, ficha de los tracks y batería.** Lo pidió Bruno («vamos a acabar
 con gpsdroid»): las ideas que quedaban.
@@ -70,7 +105,7 @@ con gpsdroid»): las ideas que quedaban.
   eran `HTTP 502` del IGN, pasajeros; repetir reanuda), grabar un track y su ficha (423 m, ↑ 95 m,
   como lo mandado). Ojo al probar con `adb emu geo fix`: las latitudes con muchos decimales
   (`40.785799999999995`) la consola las lee mal y el track sale en zigzag; redondear a 6.
-  **Probada en el móvil por Bruno (24-nov-2026)**: «funciona perfectamente». APK en `~/Documentos/GpsDroid-0.3.0.apk`.
+  **Probada en el móvil por Bruno (24-nov-2026)**: «funciona perfectamente». APK en `~/Documentos/Software`.
 
 **0.2.1 (22-nov-2026): paleta verde fija.** Con los colores del fondo de pantalla (Material You)
 el móvil de Bruno daba una paleta gris y lo seleccionado (chips de Offline, interruptores) no se
@@ -110,4 +145,4 @@ capas), escala y atribución; descarga de zonas. **Sin probar en el móvil**: gr
 (y que siga con la pantalla apagada), abrir/compartir/importar, la pantalla de satélites con fix.
 
 
-Ideas, si hicieran falta: waypoints, pintar en el mapa el punto marcado en el perfil.
+Ideas, si hicieran falta: pintar en el mapa el punto marcado en el perfil; en el coche, mapa orientado hacia donde vas.

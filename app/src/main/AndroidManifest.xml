@@ -16,6 +16,10 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         tools:ignore="BatteryLife" />
 
+    <!-- Android Auto: app de navegación (la única categoría que puede pintar su propio mapa). -->
+    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
+
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <application
@@ -37,6 +41,19 @@
         </activity>
 
         <service android:name=".data.TrackService" android:exported="false" android:foregroundServiceType="location" />
+
+        <!-- Android Auto. Para que salga una app que no viene de Google Play hay que activar
+             «Fuentes desconocidas» en los ajustes de desarrollador de Android Auto. -->
+        <!-- Sin permiso a propósito: quien se conecta lo filtra el HostValidator (sólo anfitriones conocidos). -->
+        <service android:name=".car.GpsCarAppService" android:exported="true" tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.NAVIGATION" />
+            </intent-filter>
+        </service>
+        <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
+        <!-- 2: la barra de acciones del mapa, arrastrar y pellizcar. -->
+        <meta-data android:name="androidx.car.app.minCarApiLevel" android:value="2" />
 
         <!-- «Compartir GPX» -->
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.files"

@@ -188,4 +188,47 @@ class CoreTest {
         // 700→705 (+5: bajar a 699 no llega al umbral), 705→710 (+5), 702→708 (+6).
         assertEquals(16.0, Geo.ascentM(pts), 1e-9)
     }
+
+    @Test fun rumboYPuntoCardinal() {
+        // Del Retiro a la Puerta del Sol (al oeste, un poco al norte) y al revés.
+        val b = Direction.bearingDeg(40.4153, -3.6845, 40.4169, -3.7035)
+        assertTrue(b in 270.0..285.0)
+        assertEquals("O", Direction.cardinal(b))
+        assertEquals("E", Direction.cardinal(Direction.bearingDeg(40.4169, -3.7035, 40.4153, -3.6845)))
+        assertEquals(0.0, Direction.bearingDeg(40.0, -3.0, 41.0, -3.0), 1e-9)
+        assertEquals("N", Direction.cardinal(359.0))
+        assertEquals("NO", Direction.cardinal(320.0))
+        assertEquals("SO", Direction.cardinal(225.0))
+        assertEquals("suroeste", Direction.cardinalName(225.0))
+        assertEquals("850 m al NE · 45°", Direction.describe(850.0, 45.2))
+    }
+
+    @Test fun aQueMano() {
+        assertEquals("de frente", Direction.relative(10.0, 350.0))
+        assertEquals("a tu derecha", Direction.relative(90.0, 0.0))
+        assertEquals("a tu izquierda", Direction.relative(0.0, 90.0))
+        assertEquals("delante a la izquierda", Direction.relative(320.0, 10.0))
+        assertEquals("detrás a la derecha", Direction.relative(140.0, 0.0))
+        assertEquals("detrás", Direction.relative(180.0, 0.0))
+        assertEquals(-20.0, Direction.relativeDeg(350.0, 10.0), 1e-9)
+    }
+
+    @Test fun puntosEnGpx() {
+        val pts = listOf(Waypoint(1, "Fuente & <pozo>", 40.7856, -3.9925, 1850.4, "2026-11-24T10:00:00Z"), Waypoint(2, "Coche", 40.8, -3.95))
+        val back = WaypointGpx.parse(WaypointGpx.write(pts))
+        assertEquals(2, back.size)
+        assertEquals("Fuente & <pozo>", back[0].name)
+        assertEquals(40.7856, back[0].lat, 1e-7)
+        assertEquals(1850.4, back[0].ele!!, 0.05)
+        assertEquals("2026-11-24T10:00:00Z", back[0].time)
+        assertNull(back[1].ele)
+        // De otras apps: comillas simples, sin nombre, CDATA, y un track que no cuenta.
+        val other = "<gpx><wpt lon='-3.1' lat='40.1'/><wpt lat=\"40.2\" lon=\"-3.2\"><name><![CDATA[Refugio]]></name></wpt>" +
+            "<trk><trkseg><trkpt lat=\"1\" lon=\"2\"/></trkseg></trk></gpx>"
+        val o = WaypointGpx.parse(other, firstId = 10)
+        assertEquals(listOf("Punto 1", "Refugio"), o.map { it.name })
+        assertEquals(listOf(10L, 11L), o.map { it.id })
+        assertEquals(40.1, o[0].lat, 1e-9)
+        assertEquals("Punto 2", WaypointGpx.nextName(listOf(Waypoint(1, "Punto 1", 0.0, 0.0), Waypoint(2, "Punto 3", 0.0, 0.0))))
+    }
 }

@@ -23,6 +23,17 @@ ubicación por red ni servicios de Google.
   importar GPX de otras apps, compartirlos y borrarlos. Al tocar uno se abre su **ficha**:
   distancia, tiempo total y en movimiento, velocidad media y ritmo, subida y bajada, altitud
   máxima y mínima y el **perfil de altitud** (se recorre con el dedo). Desde ella, «Ver en el mapa».
+- **Puntos**: mantén pulsado el mapa (o toca el botón verde para tu posición) y guárdalo con un
+  nombre. Al tocar uno: **ir hacia él** (arriba en el mapa sale una flecha que apunta hacia el
+  punto con la brújula, la distancia y hacia dónde queda: «1,2 km al NE · a tu derecha», y una
+  línea discontinua hasta él), renombrarlo, borrarlo o abrirlo en otra app de mapas. En Tracks
+  salen todos, los más cerca primero, y se comparten en un GPX; al importar un GPX con puntos
+  (`<wpt>`) se añaden.
+- **Android Auto**: el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
+  que se graba, los puntos, guardar un punto donde estás, grabar y la tarjeta del destino (flecha,
+  distancia y a qué mano queda). En GrapheneOS necesita Google Play aislado y Android Auto; y, como
+  la app no viene de Google Play, hay que activar **«Fuentes desconocidas»** en los ajustes de
+  desarrollador de Android Auto (se abren tocando varias veces la versión en sus ajustes).
 - **Mapas offline**: bajar una zona (alrededor del centro del mapa o de tu posición, o una sierra
   entera: Guadarrama, Gredos, Picos de Europa, Sierra Nevada…), uno de los mapas o todos, del
   zoom que elijas. Antes dice cuántas teselas son y lo que ocupará; lo bajado no se vuelve a pedir,

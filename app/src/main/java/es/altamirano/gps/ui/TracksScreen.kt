@@ -75,6 +75,11 @@ import es.altamirano.gps.core.Geo
 import es.altamirano.gps.data.Recording
 import es.altamirano.gps.data.TrackInfo
 import es.altamirano.gps.data.Tracks
+import es.altamirano.gps.data.Waypoints
+import es.altamirano.gps.data.Gps
+import es.altamirano.gps.core.Waypoint
+import androidx.compose.foundation.lazy.items
+import androidx.lifecycle.compose.LifecycleStartEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -91,6 +96,15 @@ fun TracksScreen() {
         value = withContext(Dispatchers.IO) { Tracks.list() }
     }
     var toDelete by remember { mutableStateOf<TrackInfo?>(null) }
+    val points by Waypoints.list.collectAsState()
+    val target by Waypoints.target.collectAsState()
+    val location by Gps.location.collectAsState()
+    var pointSheet by remember { mutableStateOf<Waypoint?>(null) }
+    // Para decir a qué distancia queda cada punto hace falta el GPS, pero sólo si hay puntos.
+    LifecycleStartEffect(points.isNotEmpty()) {
+        if (points.isNotEmpty()) Gps.acquire("tracks")
+        onStopOrDispose { Gps.release("tracks") }
+    }
     var details by remember { mutableStateOf<TrackInfo?>(null) }
     val share: (TrackInfo) -> Unit = { t ->
         val uri = FileProvider.getUriForFile(context, context.packageName + ".files", t.file)
@@ -166,6 +180,28 @@ fun TracksScreen() {
             TrackRow(Modifier.padding(horizontal = side), i, t, recordingThis, onOpen = { details = t }, onMap = { Tracks.open(t.file) },
                 onDelete = { toDelete = t }, onShare = { share(t) })
         }
+        item {
+            Row(Modifier.padding(start = side, end = side - 8.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Puntos", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(if (points.isEmpty()) "Mantén pulsado el mapa o toca el botón verde del mapa para guardar uno"
+                        else "Los más cerca primero; toca uno para ir hacia él",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (points.isNotEmpty()) IconButton(onClick = {
+                    val uri = FileProvider.getUriForFile(context, context.packageName + ".files", Waypoints.file())
+                    val send = Intent(Intent.ACTION_SEND).setType("application/gpx+xml").putExtra(Intent.EXTRA_STREAM, uri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    context.startActivity(Intent.createChooser(send, "Puntos"))
+                }) { Icon(Icons.Filled.Share, "Compartir los puntos (GPX)") }
+            }
+        }
+        val loc = location?.takeIf { Gps.isFresh(it) }
+        val sorted = if (loc == null) points.sortedBy { it.name.lowercase() }
+            else points.sortedBy { Geo.distanceM(loc.latitude, loc.longitude, it.lat, it.lon) }
+        items(sorted, key = { "p" + it.id }) { w ->
+            WaypointRow(Modifier.padding(horizontal = side), w, location, isTarget = target?.id == w.id, onClick = { pointSheet = w })
+        }
     }
 
     toDelete?.let { t ->
@@ -174,6 +210,13 @@ fun TracksScreen() {
             text = { Text("«${t.name}» se borra del móvil y no se puede recuperar.") },
             confirmButton = { TextButton(onClick = { Tracks.delete(t.file); toDelete = null }) { Text("Borrar") } },
             dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Cancelar") } })
+    }
+
+    pointSheet?.let { w ->
+        val current = points.firstOrNull { it.id == w.id }
+        if (current == null) pointSheet = null
+        else WaypointSheet(current, location, isTarget = target?.id == current.id, onDismiss = { pointSheet = null },
+            onShowOnMap = { pointSheet = null; Waypoints.show(current) })
     }
 
     details?.let { t ->

@@ -4,6 +4,7 @@ import android.app.Application
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.data.Tiles
 import es.altamirano.gps.data.Tracks
+import es.altamirano.gps.data.Waypoints
 
 class GpsApp : Application() {
     override fun onCreate() {
@@ -11,5 +12,6 @@ class GpsApp : Application() {
         Gps.init(this)
         Tracks.init(this)
         Tiles.init(this)
+        Waypoints.init(this)
     }
 }

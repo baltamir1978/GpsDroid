@@ -2,9 +2,6 @@ package es.altamirano.gps.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Path
 import android.location.Location
 import android.os.Build
 import android.os.SystemClock
@@ -47,8 +44,6 @@ import es.altamirano.common.ui.glass
 import es.altamirano.gps.core.MapLayer
 import es.altamirano.gps.core.MapStyle
 import androidx.compose.material.icons.filled.Layers
-import org.osmdroid.tileprovider.MapTileProviderBasic
-import org.osmdroid.views.overlay.TilesOverlay
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.mutableLongStateOf
@@ -78,7 +73,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -92,6 +86,12 @@ import es.altamirano.gps.data.Prefs
 import es.altamirano.gps.data.Recording
 import es.altamirano.gps.data.Tiles
 import es.altamirano.gps.data.Tracks
+import es.altamirano.gps.data.Waypoints
+import es.altamirano.gps.core.Waypoint
+import android.widget.Toast
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material.icons.filled.AddLocationAlt
 import kotlinx.coroutines.delay
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -100,8 +100,6 @@ import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Overlay
-import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.ScaleBarOverlay
 
 @SuppressLint("ClickableViewAccessibility")
@@ -128,18 +126,17 @@ fun MapScreen() {
     val density = context.resources.displayMetrics.density
     val topInsetPx = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
     val bottomBar = LocalBottomBar.current
-    val openedLine = remember { trackLine(MapColors.opened.toArgb(), 5f * density) }
-    val recLine = remember { trackLine(MapColors.recording.toArgb(), 4f * density) }
-    val position = remember { PositionOverlay(density) }
-    // Los rótulos del híbrido: una segunda capa de teselas (PNG transparente) sobre la ortofoto,
-    // debajo de los tracks y la posición. Mientras carga no pinta nada (de serie, una cuadrícula gris
-    // que taparía la foto).
-    val labels = remember {
-        TilesOverlay(MapTileProviderBasic(context, Tiles.sources.getValue(MapLayer.LABELS)), context).apply {
-            loadingBackgroundColor = android.graphics.Color.TRANSPARENT
-            loadingLineColor = android.graphics.Color.TRANSPARENT
-        }
-    }
+    val scene = remember { MapScene(context, density) }
+    val position = scene.position
+    val points by Waypoints.list.collectAsState()
+    val target by Waypoints.target.collectAsState()
+    val focus by Waypoints.focus.collectAsState()
+    // Guardar un punto: dónde (pulsación larga o tu posición) y, mientras, el diálogo del nombre.
+    var newPoint by remember { mutableStateOf<GeoPoint?>(null) }
+    var newPointEle by remember { mutableStateOf<Double?>(null) }
+    var selected by remember { mutableStateOf<Waypoint?>(null) }
+    scene.points.onTap = { selected = it }
+    scene.points.onLongPress = { newPoint = it; newPointEle = null }
     val mapView = remember {
         MapView(context).apply {
             setTileSource(Tiles.sources.getValue(style.base))
@@ -156,9 +153,7 @@ fun MapScreen() {
                 last != null -> { controller.setZoom(15.0); controller.setCenter(GeoPoint(last.first, last.second)) }
                 else -> { controller.setZoom(6.0); controller.setCenter(GeoPoint(40.2, -3.7)) }
             }
-            overlays += openedLine
-            overlays += recLine
-            overlays += position
+            scene.install(this)
             // La escala arriba a la derecha: abajo la taparían la barra flotante y la de navegación.
             overlays += ScaleBarOverlay(this).apply {
                 setAlignRight(true); setScaleBarOffset((16 * density).toInt(), (topInsetPx + 14 * density).toInt())
@@ -176,24 +171,16 @@ fun MapScreen() {
             val c = mapView.mapCenter
             prefs.view = Triple(c.latitude, c.longitude, mapView.zoomLevelDouble)
             mapView.onPause()
-            // Si no está en el mapa, onDetach no la suelta.
-            if (labels !in mapView.overlays) labels.onDetach(mapView)
-            mapView.onDetach()
+            scene.release(mapView)
         }
     }
 
     LaunchedEffect(style) {
         prefs.style = style
-        mapView.setTileSource(Tiles.sources.getValue(style.base))
-        mapView.maxZoomLevel = style.maxZoom.toDouble()
-        if (mapView.zoomLevelDouble > style.maxZoom) mapView.controller.setZoom(style.maxZoom.toDouble())
-        val wantLabels = style.overlay == MapLayer.LABELS
-        if (wantLabels && labels !in mapView.overlays) mapView.overlays.add(0, labels)
-        if (!wantLabels) mapView.overlays.remove(labels)
+        scene.applyStyle(mapView, style)
         zoom = mapView.zoomLevelDouble
-        mapView.invalidate()
     }
-    LaunchedEffect(online) { prefs.online = online; mapView.setUseDataConnection(online); labels.setUseDataConnection(online) }
+    LaunchedEffect(online) { prefs.online = online; scene.setOnline(mapView, online) }
     LaunchedEffect(Unit) { mapView.keepScreenOn = prefs.keepScreenOn }
 
     // La posición: azul con fix, gris con la última conocida. Se guarda al alejarse 200 m.
@@ -201,6 +188,7 @@ fun MapScreen() {
         val loc = location
         position.location = loc
         position.fallback = prefs.last
+        scene.points.from = loc?.takeIf { Gps.isFresh(it) }?.let { it.latitude to it.longitude }
         if (loc != null && Gps.isFresh(loc)) {
             val last = prefs.last
             if (last == null || Geo.distanceM(last.first, last.second, loc.latitude, loc.longitude) > 200) prefs.last = loc.latitude to loc.longitude
@@ -217,8 +205,18 @@ fun MapScreen() {
             mapView.controller.animateTo(GeoPoint(loc.latitude, loc.longitude))
         }
     }
-    LaunchedEffect(rec.points) { recLine.setPoints(rec.points.map { GeoPoint(it.lat, it.lon) }); mapView.invalidate() }
-    LaunchedEffect(opened) { openedLine.setPoints(opened?.points.orEmpty().map { GeoPoint(it.lat, it.lon) }); mapView.invalidate() }
+    LaunchedEffect(rec.points) { scene.setTrack(scene.recording, rec.points); mapView.invalidate() }
+    LaunchedEffect(opened) { scene.setTrack(scene.opened, opened?.points.orEmpty()); mapView.invalidate() }
+    LaunchedEffect(points, target) { scene.points.points = points; scene.points.target = target; mapView.invalidate() }
+    // «Ver en el mapa» desde la lista de puntos.
+    LaunchedEffect(focus) {
+        val w = focus.point ?: return@LaunchedEffect
+        follow = false
+        mapView.post {
+            if (mapView.zoomLevelDouble < 14) mapView.controller.setZoom(15.0)
+            mapView.controller.setCenter(GeoPoint(w.lat, w.lon))
+        }
+    }
     LaunchedEffect(fit) {
         val pts = opened?.points ?: return@LaunchedEffect
         if (pts.isEmpty()) return@LaunchedEffect
@@ -239,6 +237,16 @@ fun MapScreen() {
         Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(12.dp).widthIn(max = 300.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             InfoPill(location)
+            target?.let { t ->
+                TargetPill(t, location, onShow = {
+                    // Que se vean los dos: tú y el destino.
+                    follow = false
+                    val loc = location
+                    if (loc != null && Gps.isFresh(loc)) mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(listOf(
+                        GeoPoint(loc.latitude, loc.longitude), GeoPoint(t.lat, t.lon))).increaseByScale(1.4f), true)
+                    else mapView.controller.animateTo(GeoPoint(t.lat, t.lon))
+                }, onClose = { Waypoints.setTarget(null) })
+            }
             AnimatedVisibility(rec.active, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 RecordingPill(rec.lengthM, rec.startedElapsed)
             }
@@ -254,8 +262,17 @@ fun MapScreen() {
         }
 
         // Abajo: la atribución del IGN (la pide la licencia) y la barra flotante de Expressive.
-        Column(Modifier.align(Alignment.BottomCenter).padding(bottom = bottomBar + 10.dp), horizontalAlignment = Alignment.CenterHorizontally,
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = bottomBar + 10.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
+                SmallFloatingActionButton(onClick = {
+                    val loc = location
+                    if (loc == null || !Gps.isFresh(loc)) Toast.makeText(context, "Todavía no hay posición del GPS", Toast.LENGTH_SHORT).show()
+                    else { newPoint = GeoPoint(loc.latitude, loc.longitude); newPointEle = if (loc.hasAltitude()) loc.altitude else null }
+                }, containerColor = MapColors.waypoint, contentColor = Color.White) {
+                    Icon(Icons.Filled.AddLocationAlt, "Guardar mi posición como punto")
+                }
+            }
             HorizontalFloatingToolbar(
                 expanded = true,
                 colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(
@@ -289,6 +306,20 @@ fun MapScreen() {
             Text(MapLayer.ATTRIBUTION, fontSize = 10.sp, color = Color.Black.copy(alpha = 0.75f),
                 modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 1.dp))
         }
+    }
+
+    newPoint?.let { g ->
+        NameDialog("Guardar punto", Waypoints.nextName(), Geo.formatLatLon(g.latitude, g.longitude), "Guardar",
+            onDismiss = { newPoint = null }) { name ->
+            Waypoints.add(name, g.latitude, g.longitude, newPointEle)
+            newPoint = null
+        }
+    }
+    selected?.let { w ->
+        // Puede haber cambiado (renombrado) o desaparecido mientras está abierta.
+        val current = points.firstOrNull { it.id == w.id }
+        if (current == null) selected = null
+        else WaypointSheet(current, location, isTarget = target?.id == current.id, onDismiss = { selected = null })
     }
 }
 
@@ -339,58 +370,3 @@ private fun RecordingPill(lengthM: Double, started: Long) {
             fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
-
-private fun trackLine(color: Int, width: Float) = Polyline().apply {
-    outlinePaint.color = color
-    outlinePaint.strokeWidth = width
-    outlinePaint.strokeCap = Paint.Cap.ROUND
-    outlinePaint.strokeJoin = Paint.Join.ROUND
-    outlinePaint.isAntiAlias = true
-    // Sin globo al tocarla.
-    infoWindow = null
-}
-
-/** Tu posición: el círculo de precisión, el punto y, si te mueves, una flecha hacia donde vas. */
-private class PositionOverlay(private val density: Float) : Overlay() {
-    var location: Location? = null
-    var fallback: Pair<Double, Double>? = null
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = android.graphics.Color.WHITE }
-    private val halo = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val pt = android.graphics.Point()
-    private val pt2 = android.graphics.Point()
-    private val arrow = Path()
-
-    override fun draw(c: Canvas, mapView: MapView, shadow: Boolean) {
-        if (shadow) return
-        val loc = location
-        val fresh = Gps.isFresh(loc)
-        val (lat, lon) = when {
-            loc != null -> loc.latitude to loc.longitude
-            else -> fallback ?: return
-        }
-        val color = if (fresh) MapColors.position.toArgb() else MapColors.stale.toArgb()
-        val proj = mapView.projection
-        proj.toPixels(GeoPoint(lat, lon), pt)
-        if (fresh && loc != null && loc.hasAccuracy()) {
-            proj.toPixels(GeoPoint(lat + loc.accuracy / 111_320.0, lon), pt2)
-            val r = (pt.y - pt2.y).toFloat()
-            if (r > 12 * density) {
-                halo.color = color; halo.alpha = 40
-                c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, halo)
-            }
-        }
-        if (fresh && loc != null && loc.hasBearing() && loc.hasSpeed() && loc.speed > 0.7f) {
-            arrow.reset()
-            val s = 9 * density
-            arrow.moveTo(0f, -s * 2.1f); arrow.lineTo(s * 0.9f, -s * 0.6f); arrow.lineTo(-s * 0.9f, -s * 0.6f); arrow.close()
-            c.save(); c.translate(pt.x.toFloat(), pt.y.toFloat()); c.rotate(loc.bearing - mapView.mapOrientation)
-            fill.color = color; c.drawPath(arrow, fill); c.restore()
-        }
-        fill.color = color
-        ring.strokeWidth = 2.5f * density
-        c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 8 * density, fill)
-        c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 8 * density, ring)
-    }
-}
-
