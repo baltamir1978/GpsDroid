@@ -36,6 +36,13 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.4.1 (24-nov-2026): textos legibles en modo oscuro.** Bruno: «en la pestaña de tracks sobre
+todo no se lee prácticamente nada en modo oscuro». La paleta estaba bien; lo que faltaba era una
+`Surface` (o `Scaffold`) en la raíz: sin ella `LocalContentColor` se queda en el negro de serie de
+Compose y todo `Text` sin color propio (nombre y datos de cada track, «Puntos», la tarjeta de la
+batería…) salía negro sobre el fondo oscuro. Ahora `MainActivity` envuelve la app en una `Surface`
+con `surface`, que pone `onSurface`. **Sin probar en el móvil.**
+
 **0.4.0 (24-nov-2026): Android Auto y puntos.** Lo pidió Bruno («android auto a la app de mapas
 ign» y «poder guardar puntos en el mapa y que me diga dirección y distancia»).
 - **Puntos** (`core/Waypoints.kt`: `Waypoint`, `Direction`, `WaypointGpx`; `data/Waypoints`;

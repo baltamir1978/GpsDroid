@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.asPaddingValues
@@ -59,7 +60,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { GpsTheme { App() } }
+        // La Surface pone el color del texto (onSurface): sin ella Compose deja el negro de serie y,
+        // en modo oscuro, los textos sin color propio (Tracks, sobre todo) no se leían.
+        setContent { GpsTheme { Surface(color = MaterialTheme.colorScheme.surface) { App() } } }
     }
 }
 
