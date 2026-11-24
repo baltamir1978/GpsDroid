@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * en la caché de osmdroid (una base SQLite con todas).
  */
 class IgnTileSource(val layer: MapLayer) : OnlineTileSourceBase(
-    "IGN-${layer.key}", 0, layer.maxZoom, MapTiles.TILE_SIZE, ".jpeg", arrayOf("https://www.ign.es/wmts/"), MapLayer.ATTRIBUTION,
+    "IGN-${layer.key}", 0, layer.maxZoom, MapTiles.TILE_SIZE, if (layer.png) ".png" else ".jpeg", arrayOf("https://www.ign.es/wmts/"), MapLayer.ATTRIBUTION,
 ) {
     override fun getTileURLString(index: Long) =
         layer.tileUrl(MapTileIndex.getZoom(index), MapTileIndex.getX(index), MapTileIndex.getY(index))
@@ -151,6 +151,11 @@ object Tiles {
         _download.value = _download.value.copy(running = false, message = "Cancelada: lo bajado se queda; repite para seguir")
     }
 
+    /** Un JPEG empieza por FF D8; un PNG, por 89 50 4E 47 ("\u0089PNG"). */
+    internal fun looksLikeImage(b: ByteArray, png: Boolean): Boolean =
+        if (png) b.size >= 4 && b[0] == 0x89.toByte() && b[1] == 'P'.code.toByte() && b[2] == 'N'.code.toByte() && b[3] == 'G'.code.toByte()
+        else b.size >= 2 && b[0] == 0xFF.toByte() && b[1] == 0xD8.toByte()
+
     /** El motivo del último fallo, para enseñarlo (y para el registro). */
     @Volatile private var lastError: String? = null
 
@@ -166,8 +171,8 @@ object Tiles {
                 if (c.responseCode != 200) "HTTP ${c.responseCode}"
                 else {
                     val bytes = c.inputStream.use { it.readBytes() }
-                    // Un JPEG empieza por FF D8; el IGN contesta errores de WMTS en XML con 200 a veces.
-                    if (bytes.size < 2 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) "no es una imagen"
+                    // El IGN contesta a veces errores de WMTS en XML con un 200: se mira la firma.
+                    if (!looksLikeImage(bytes, src.layer.png)) "no es una imagen"
                     else {
                         val expires = System.currentTimeMillis() + Configuration.getInstance().expirationOverrideDuration!!
                         // saveFile de osmdroid 6.1.20 devuelve siempre false, aunque guarde (su

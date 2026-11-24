@@ -10,7 +10,8 @@ proyectos; aquí va lo propio de esta.
 ## Cómo está hecha
 
 - **`core/`** (Kotlin puro, `CoreTest`): traducción de los módulos de ZeroGPS. `MapTiles` (Web
-  Mercator), `MapLayers` (las tres capas, URL WMTS, bytes medios por tesela), `OfflineZone`
+  Mercator), `MapLayers` (`MapLayer`: las series de teselas del IGN, rótulos incluidos, URL WMTS, bytes medios
+  por tesela; `MapStyle`: lo que se elige en el mapa, fondo + capa encima), `TrackStats` (la ficha de un track), `OfflineZone`
   (zonas ya hechas, plan de descarga, tope, formatos con coma decimal), `Gpx` (lee GPX de otras
   apps: comillas simples, varios segmentos, rutas) y `TrackRecorder` (+ `Geo`: distancia,
   desnivel con umbral de 3 m). El grabador, a diferencia de ZeroGPS, descarta posiciones con más
@@ -34,6 +35,42 @@ proyectos; aquí va lo propio de esta.
 - Interfaz sólo en español (como ZeroGPS). Material 3 Expressive con los colores del sistema.
 
 ## Estado
+
+**0.3.0 (24-nov-2026): híbrido, ficha de los tracks y batería.** Lo pidió Bruno («vamos a acabar
+con gpsdroid»): las ideas que quedaban.
+- **Mapa híbrido**: la ortofoto con los rótulos de `IGNBaseOrto` encima (`ign-base`, **PNG** con
+  transparencia, hasta z19; comprobado en sus GetCapabilities y en Madrid centro). Las capas pasan
+  a ser dos cosas: `MapLayer` (cada serie de teselas, con su caché: topo, pnoa, base y `rotulos`) y
+  `MapStyle` (lo que se elige: Topográfico, Satélite, Híbrido, IGN Base). El híbrido reutiliza las
+  teselas de la ortofoto. En el mapa los rótulos son un `TilesOverlay` propio con
+  `MapTileProviderBasic`, fondo de carga transparente (de serie pinta una cuadrícula gris que
+  taparía la foto), debajo de tracks y posición, y obedece «Usar la red». Si no está en el mapa,
+  `MapView.onDetach` no lo suelta: se suelta a mano. Las claves de `MapStyle` son las de las capas
+  de la 0.2 (lo guardado en `Prefs` sigue valiendo). Descargas: se elige estilo (o «Todos») y se
+  bajan sus capas sin repetir (`MapStyle.layersOf`); la firma se comprueba según el formato
+  (`Tiles.looksLikeImage`: JPEG `FF D8`, PNG `89 50 4E 47`). «Todos» a 5 km de z5 al máximo son
+  ~93.900 teselas: sigue cabiendo en el tope de 100.000. Rótulos medidos: 20 KB a z12, casi nada
+  de cerca en el monte (662 bytes vacía), ~10 KB en ciudad a z17.
+- **Ficha de un track** (`core/TrackStats`, `ui/TrackDetail.kt`): al tocar un track sube una hoja
+  con distancia, tiempo total y **en movimiento** (tramos a ≥ 0,5 m/s: el grabador no guarda puntos
+  estando quieto, así que una parada es un salto de tiempo con poca distancia), velocidad media y
+  ritmo en movimiento, subida y bajada (histéresis de 3 m), altitud máxima y mínima y el **perfil
+  de altitud** en Canvas (rejilla con pasos redondos, rango mínimo de 50 m para que un llano no
+  parezca una montaña; tocar o arrastrar marca distancia y altitud). El perfil se reduce a 400
+  puntos guardando en cada tramo el más alto y el más bajo (no se pierden cimas). Lo que el GPX no
+  trae (horas en una ruta, altitudes) no sale. «Ver en el mapa» está en la hoja y en el menú ⋮.
+- **Optimización de batería**: si Android la aplica a la app, en Tracks sale una tarjeta para
+  quitarla (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, permiso
+  `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` con `tools:ignore="BatteryLife"`: lo restringe Google
+  Play, y la app no va a Play). Con la pantalla apagada, la optimización puede espaciar las
+  posiciones aunque el servicio en primer plano siga vivo.
+- 12 pruebas (4 nuevas: estilos, ficha con parada, desnivel con ruido, perfil reducido) y lint sin
+  errores. **Probado en el emulador con la release**: abre, el híbrido baja rótulos, una descarga
+  del híbrido de 1 km (3.432 teselas) acabó a la tercera sin fallos (los fallos de las dos primeras
+  eran `HTTP 502` del IGN, pasajeros; repetir reanuda), grabar un track y su ficha (423 m, ↑ 95 m,
+  como lo mandado). Ojo al probar con `adb emu geo fix`: las latitudes con muchos decimales
+  (`40.785799999999995`) la consola las lee mal y el track sale en zigzag; redondear a 6.
+  **Sin probar en el móvil** (no estaba por adb). APK en `~/Documentos/GpsDroid-0.3.0.apk`.
 
 **0.2.1 (22-nov-2026): paleta verde fija.** Con los colores del fondo de pantalla (Material You)
 el móvil de Bruno daba una paleta gris y lo seleccionado (chips de Offline, interruptores) no se
@@ -73,8 +110,6 @@ capas), escala y atribución; descarga de zonas. **Sin probar en el móvil**: gr
 (y que siga con la pantalla apagada), abrir/compartir/importar, la pantalla de satélites con fix.
 
 
-Pendiente / ideas: comprobar en el móvil que se pintan las teselas del IGN, que la grabación sigue
-con la pantalla apagada (GrapheneOS no mata servicios en primer plano, pero la optimización de
-batería puede retrasar el GPS) y una descarga real; la capa «híbrida» (`IGNBaseOrto`, PNG con
-transparencia encima de la ortofoto: aquí no cuesta nada, osmdroid pinta PNG); estadísticas de un
-track (perfil de altitud).
+Pendiente: en el móvil, el híbrido, la ficha de un track de verdad, grabar con la pantalla apagada
+(con y sin la optimización de batería), abrir/compartir/importar y la pantalla de satélites con fix.
+Ideas, si hicieran falta: waypoints, pintar en el mapa el punto marcado en el perfil.

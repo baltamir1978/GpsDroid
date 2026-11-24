@@ -45,6 +45,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import es.altamirano.common.ui.glass
 import es.altamirano.gps.core.MapLayer
+import es.altamirano.gps.core.MapStyle
+import androidx.compose.material.icons.filled.Layers
+import org.osmdroid.tileprovider.MapTileProviderBasic
+import org.osmdroid.views.overlay.TilesOverlay
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.mutableLongStateOf
@@ -105,7 +109,7 @@ import org.osmdroid.views.overlay.ScaleBarOverlay
 fun MapScreen() {
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
-    var layer by remember { mutableStateOf(prefs.layer) }
+    var style by remember { mutableStateOf(prefs.style) }
     var online by remember { mutableStateOf(prefs.online) }
     // Seguir la posición: se quita al mover el mapa con el dedo y se vuelve con el botón.
     var follow by remember { mutableStateOf(prefs.view == null) }
@@ -127,14 +131,23 @@ fun MapScreen() {
     val openedLine = remember { trackLine(MapColors.opened.toArgb(), 5f * density) }
     val recLine = remember { trackLine(MapColors.recording.toArgb(), 4f * density) }
     val position = remember { PositionOverlay(density) }
+    // Los rótulos del híbrido: una segunda capa de teselas (PNG transparente) sobre la ortofoto,
+    // debajo de los tracks y la posición. Mientras carga no pinta nada (de serie, una cuadrícula gris
+    // que taparía la foto).
+    val labels = remember {
+        TilesOverlay(MapTileProviderBasic(context, Tiles.sources.getValue(MapLayer.LABELS)), context).apply {
+            loadingBackgroundColor = android.graphics.Color.TRANSPARENT
+            loadingLineColor = android.graphics.Color.TRANSPARENT
+        }
+    }
     val mapView = remember {
         MapView(context).apply {
-            setTileSource(Tiles.sources.getValue(layer))
+            setTileSource(Tiles.sources.getValue(style.base))
             isTilesScaledToDpi = true
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             minZoomLevel = 5.0
-            maxZoomLevel = layer.maxZoom.toDouble()
+            maxZoomLevel = style.maxZoom.toDouble()
             // España por defecto; si no, dónde se quedó o la última posición conocida.
             val v = prefs.view
             val last = prefs.last
@@ -162,18 +175,25 @@ fun MapScreen() {
         onDispose {
             val c = mapView.mapCenter
             prefs.view = Triple(c.latitude, c.longitude, mapView.zoomLevelDouble)
-            mapView.onPause(); mapView.onDetach()
+            mapView.onPause()
+            // Si no está en el mapa, onDetach no la suelta.
+            if (labels !in mapView.overlays) labels.onDetach(mapView)
+            mapView.onDetach()
         }
     }
 
-    LaunchedEffect(layer) {
-        prefs.layer = layer
-        mapView.setTileSource(Tiles.sources.getValue(layer))
-        mapView.maxZoomLevel = layer.maxZoom.toDouble()
-        if (mapView.zoomLevelDouble > layer.maxZoom) mapView.controller.setZoom(layer.maxZoom.toDouble())
+    LaunchedEffect(style) {
+        prefs.style = style
+        mapView.setTileSource(Tiles.sources.getValue(style.base))
+        mapView.maxZoomLevel = style.maxZoom.toDouble()
+        if (mapView.zoomLevelDouble > style.maxZoom) mapView.controller.setZoom(style.maxZoom.toDouble())
+        val wantLabels = style.overlay == MapLayer.LABELS
+        if (wantLabels && labels !in mapView.overlays) mapView.overlays.add(0, labels)
+        if (!wantLabels) mapView.overlays.remove(labels)
         zoom = mapView.zoomLevelDouble
+        mapView.invalidate()
     }
-    LaunchedEffect(online) { prefs.online = online; mapView.setUseDataConnection(online) }
+    LaunchedEffect(online) { prefs.online = online; mapView.setUseDataConnection(online); labels.setUseDataConnection(online) }
     LaunchedEffect(Unit) { mapView.keepScreenOn = prefs.keepScreenOn }
 
     // La posición: azul con fix, gris con la última conocida. Se guarda al alejarse 200 m.
@@ -254,8 +274,8 @@ fun MapScreen() {
                     }
                 },
             ) {
-                TextButton(onClick = { layer = layer.next() }) {
-                    Icon(layerIcon(layer), null, Modifier.size(20.dp)); Text(" ${layer.label}", fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = { style = style.next() }) {
+                    Icon(styleIcon(style), null, Modifier.size(20.dp)); Text(" ${style.label}", fontWeight = FontWeight.SemiBold)
                 }
                 IconButton(onClick = { online = !online }) {
                     Icon(if (online) Icons.Filled.Cloud else Icons.Filled.CloudOff, if (online) "Usando la red" else "Sin red")
@@ -263,7 +283,7 @@ fun MapScreen() {
                 IconToggleButton(checked = follow, onCheckedChange = { follow = it }) {
                     Icon(if (follow) Icons.Filled.MyLocation else Icons.Filled.LocationSearching, "Seguir mi posición")
                 }
-                Text("z%d".format(zoom.toInt()) + if (zoom >= layer.maxZoom - 0.01) "+" else "", fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                Text("z%d".format(zoom.toInt()) + if (zoom >= style.maxZoom - 0.01) "+" else "", fontWeight = FontWeight.Bold, fontSize = 14.sp,
                     modifier = Modifier.padding(horizontal = 8.dp))
             }
             Text(MapLayer.ATTRIBUTION, fontSize = 10.sp, color = Color.Black.copy(alpha = 0.75f),
@@ -272,10 +292,11 @@ fun MapScreen() {
     }
 }
 
-private fun layerIcon(l: MapLayer) = when (l) {
-    MapLayer.TOPO -> Icons.Filled.Terrain
-    MapLayer.ORTHO -> Icons.Filled.SatelliteAlt
-    MapLayer.BASE -> Icons.Filled.Map
+private fun styleIcon(s: MapStyle) = when (s) {
+    MapStyle.TOPO -> Icons.Filled.Terrain
+    MapStyle.ORTHO -> Icons.Filled.SatelliteAlt
+    MapStyle.HYBRID -> Icons.Filled.Layers
+    MapStyle.BASE -> Icons.Filled.Map
 }
 
 @Composable

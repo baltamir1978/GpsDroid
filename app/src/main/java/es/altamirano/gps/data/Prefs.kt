@@ -2,14 +2,15 @@ package es.altamirano.gps.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import es.altamirano.gps.core.MapLayer
+import es.altamirano.gps.core.MapStyle
 
 /** Lo que se recuerda entre sesiones (lo que en ZeroGPS es `maps.conf`). */
 class Prefs(context: Context) {
     private val p: SharedPreferences = context.getSharedPreferences("gps", Context.MODE_PRIVATE)
 
-    var layer: MapLayer
-        get() = MapLayer.fromKey(p.getString("layer", null))
+    /** El mapa elegido. Se guarda con la clave de la 0.2 («layer»): sus valores siguen valiendo. */
+    var style: MapStyle
+        get() = MapStyle.fromKey(p.getString("layer", null))
         set(v) = p.edit().putString("layer", v.key).apply()
 
     /** Dónde se quedó el mapa: lat, lon, zoom. */

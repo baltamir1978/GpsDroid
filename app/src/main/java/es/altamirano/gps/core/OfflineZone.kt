@@ -63,7 +63,7 @@ object OfflineZone {
         return ZonePlan(lo, hi, per.values.sum(), per.entries.sumOf { (z, n) -> n * layer.estimatedTileBytes(z) }, per)
     }
 
-    /** Varias capas a la vez («Los tres»): se suman. */
+    /** Varias capas a la vez («Todos», o el híbrido: ortofoto + rótulos): se suman. */
     fun plan(box: BBox, zmin: Int, zmax: Int, layers: List<MapLayer>): Pair<Long, Long> =
         layers.map { plan(box, zmin, zmax, it) }.let { p -> p.sumOf { it.tiles } to p.sumOf { it.bytes } }
 

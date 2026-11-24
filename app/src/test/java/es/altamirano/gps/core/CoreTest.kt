@@ -28,9 +28,68 @@ class CoreTest {
         assertTrue(topo.contains("tilematrix=12") && topo.contains("tilecol=2005") && topo.contains("tilerow=1538"))
         assertTrue(MapLayer.ORTHO.tileUrl(14, 1, 2).contains("pnoa-ma?") && MapLayer.ORTHO.tileUrl(14, 1, 2).contains("layer=OI.OrthoimageCoverage"))
         assertTrue(MapLayer.BASE.tileUrl(14, 1, 2).contains("layer=IGNBaseTodo"))
-        assertEquals(MapLayer.ORTHO, MapLayer.fromKey("pnoa"))
-        assertEquals(MapLayer.TOPO, MapLayer.fromKey("nada"))
-        assertEquals(MapLayer.TOPO, MapLayer.BASE.next())
+        val labels = MapLayer.LABELS.tileUrl(15, 16039, 12326)
+        assertTrue(labels.contains("ign-base?") && labels.contains("layer=IGNBaseOrto") && labels.contains("format=image/png"))
+        assertTrue(MapLayer.ORTHO.tileUrl(14, 1, 2).contains("format=image/jpeg"))
+    }
+
+    @Test fun estilosDelMapa() {
+        // Las claves de la 0.2 (capas) siguen abriendo el mismo mapa.
+        assertEquals(MapStyle.ORTHO, MapStyle.fromKey("pnoa"))
+        assertEquals(MapStyle.TOPO, MapStyle.fromKey("nada"))
+        assertEquals(MapStyle.HYBRID, MapStyle.ORTHO.next())
+        assertEquals(MapStyle.TOPO, MapStyle.BASE.next())
+        assertEquals(listOf(MapLayer.ORTHO, MapLayer.LABELS), MapStyle.HYBRID.layers)
+        assertEquals(19, MapStyle.HYBRID.maxZoom)
+        // Satélite + Híbrido: la ortofoto se baja una vez.
+        assertEquals(listOf(MapLayer.ORTHO, MapLayer.LABELS), MapStyle.layersOf(listOf(MapStyle.ORTHO, MapStyle.HYBRID)))
+        assertEquals(MapLayer.entries.toList(), MapStyle.layersOf(MapStyle.entries).sortedBy { it.ordinal })
+    }
+
+    @Test fun fichaDeUnTrack() {
+        // 1 km hacia el norte en 10 puntos (0,001° ≈ 111 m), subiendo 10 m por punto, uno cada 60 s,
+        // con una parada de 10 minutos a mitad y vuelta a bajar 20 m al final.
+        val pts = ArrayList<TrackPoint>()
+        var t = java.time.Instant.parse("2026-11-24T08:00:00Z")
+        for (i in 0..9) {
+            pts += TrackPoint(40.0 + i * 0.001, -3.7, 1000.0 + i * 10, t.toString())
+            t = t.plusSeconds(if (i == 4) 600 else 60)
+        }
+        pts += TrackPoint(40.0 + 9 * 0.001, -3.7005, 1070.0, t.toString())
+        val s = TrackStats.of(pts)
+        assertEquals(1001.0 + 42.6, s.distanceM, 5.0)
+        assertEquals(9 * 60L + 600, s.durationS)
+        assertEquals(9 * 60L, s.movingS)             // la parada no cuenta
+        assertEquals(90.0, s.ascentM, 0.01)
+        assertEquals(20.0, s.descentM, 0.01)
+        assertEquals(1000.0, s.minEleM!!, 0.0)
+        assertEquals(1090.0, s.maxEleM!!, 0.0)
+        assertEquals(1070.0, s.endEleM!!, 0.0)
+        assertEquals(pts.size, s.profile.size)
+        assertEquals(s.distanceM, s.profile.last().distanceM, 1e-9)
+        assertEquals(1043.0 / 540 * 3.6, s.movingSpeedKmh!!, 0.2)
+
+        // Sin horas ni altitud (una ruta importada): lo que no se sabe sale null.
+        val r = TrackStats.of(listOf(TrackPoint(40.0, -3.7), TrackPoint(40.01, -3.7)))
+        assertNull(r.durationS); assertNull(r.movingS); assertNull(r.maxEleM); assertNull(r.movingSpeedKmh)
+        assertTrue(r.profile.isEmpty())
+    }
+
+    @Test fun desnivelSinRuido() {
+        // ±2 m de ruido en un llano no suma nada con umbral de 3 m.
+        val noisy = (0 until 200).map { if (it % 2 == 0) 501.0 else 499.0 }
+        val (up, down) = TrackStats.climb(noisy, 3.0)
+        assertEquals(0.0, up, 0.0); assertEquals(0.0, down, 0.0)
+        assertEquals(100.0 to 50.0, TrackStats.climb(listOf(0.0, 50.0, 100.0, 75.0, 50.0), 3.0))
+    }
+
+    @Test fun perfilReducidoConservaLaCima() {
+        val pts = (0..5000).map { ProfilePoint(it * 2.0, if (it == 3333) 2500.0 else 1000.0 + it * 0.1) }
+        val d = TrackStats.downsample(pts, 400)
+        assertTrue(d.size <= 402)
+        assertEquals(pts.first(), d.first()); assertEquals(pts.last(), d.last())
+        assertTrue(d.any { it.eleM == 2500.0 })
+        assertTrue(d.zipWithNext().all { (a, b) -> a.distanceM <= b.distanceM })
     }
 
     @Test fun zonas() {

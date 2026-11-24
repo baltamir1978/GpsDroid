@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import es.altamirano.common.ui.gutter
 import es.altamirano.gps.core.BBox
 import es.altamirano.gps.core.MapLayer
+import es.altamirano.gps.core.MapStyle
 import es.altamirano.gps.core.OfflineZone
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.data.Prefs
@@ -61,7 +62,7 @@ private val RADII = listOf(1.0, 2.0, 5.0, 10.0, 20.0)
 
 /**
  * Bajar una zona para cuando no haya cobertura (como «Mapas offline» de ZeroGPS): alrededor del
- * centro del mapa o de tu posición, o una sierra entera; uno de los mapas o los tres; de qué zoom a
+ * centro del mapa o de tu posición, o una sierra entera; uno de los mapas o todos; de qué zoom a
  * qué zoom. Antes de empezar dice cuántas teselas son, lo que ocupará y el espacio libre.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -74,7 +75,7 @@ fun DownloadScreen() {
     // Dónde: 0 = centro del mapa, 1 = mi posición, 2+ = zona ya hecha.
     var where by rememberSaveable { mutableIntStateOf(0) }
     var radius by rememberSaveable { mutableStateOf(5.0) }
-    // Qué mapa: índice de MapLayer o -1 = los tres (lo que pidió Bruno por defecto en ZeroGPS).
+    // Qué mapa: índice de MapStyle o -1 = todos (lo que pidió Bruno por defecto en ZeroGPS).
     var which by rememberSaveable { mutableIntStateOf(-1) }
     var zmin by rememberSaveable { mutableIntStateOf(OfflineZone.ZOOM_MIN) }
     var zmax by rememberSaveable { mutableIntStateOf(OfflineZone.ZOOM_MAX) }
@@ -90,7 +91,9 @@ fun DownloadScreen() {
     }
     val box: BBox? = if (where >= 2) OfflineZone.PRESETS[where - 2].second
         else center?.let { OfflineZone.bboxAround(it.first, it.second, radius) }
-    val layers = if (which < 0) MapLayer.entries else listOf(MapLayer.entries[which])
+    val styles = if (which < 0) MapStyle.entries else listOf(MapStyle.entries[which])
+    // El híbrido es la ortofoto más los rótulos: si también va «Satélite», la ortofoto se baja una vez.
+    val layers = MapStyle.layersOf(styles)
     val (tiles, bytes) = box?.let { OfflineZone.plan(it, zmin, zmax, layers) } ?: (0L to 0L)
     val free = Tiles.cacheDir.apply { mkdirs() }.usableSpace
     val tooMany = tiles > OfflineZone.MAX_TILES
@@ -123,14 +126,14 @@ fun DownloadScreen() {
 
         Section("Mapa") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(which < 0, { which = -1 }, { Text("Los tres") })
-                MapLayer.entries.forEachIndexed { i, l -> FilterChip(which == i, { which = i }, { Text(l.label) }) }
+                FilterChip(which < 0, { which = -1 }, { Text("Todos") })
+                MapStyle.entries.forEachIndexed { i, s -> FilterChip(which == i, { which = i }, { Text(s.label) }) }
             }
         }
 
         Section("Zoom") {
             val top = layers.maxOf { it.maxZoom }
-            Text("De z$zmin a " + (if (zmax >= top) "máx. (" + layers.joinToString(" / ") { "z${it.maxZoom}" } + ")" else "z$zmax"), fontSize = 14.sp)
+            Text("De z$zmin a " + (if (zmax >= top) "máx. (" + styles.map { it.maxZoom }.distinct().joinToString(" / ") { "z$it" } + ")" else "z$zmax"), fontSize = 14.sp)
             RangeSlider(value = zmin.toFloat()..zmax.coerceAtMost(top).toFloat(),
                 onValueChange = { zmin = it.start.roundToInt(); zmax = it.endInclusive.roundToInt().let { e -> if (e >= top) OfflineZone.ZOOM_MAX else e } },
                 valueRange = OfflineZone.ZOOM_MIN.toFloat()..top.toFloat(), steps = top - OfflineZone.ZOOM_MIN - 1)

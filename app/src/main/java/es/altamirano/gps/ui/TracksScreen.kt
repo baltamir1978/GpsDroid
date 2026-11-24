@@ -62,6 +62,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
+import android.content.Context
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.Map
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import es.altamirano.common.ui.TonalCard
 import es.altamirano.common.ui.gutter
 import es.altamirano.gps.core.Geo
 import es.altamirano.gps.data.Recording
@@ -83,6 +91,17 @@ fun TracksScreen() {
         value = withContext(Dispatchers.IO) { Tracks.list() }
     }
     var toDelete by remember { mutableStateOf<TrackInfo?>(null) }
+    var details by remember { mutableStateOf<TrackInfo?>(null) }
+    val share: (TrackInfo) -> Unit = { t ->
+        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", t.file)
+        val send = Intent(Intent.ACTION_SEND).setType("application/gpx+xml").putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(Intent.createChooser(send, t.name))
+    }
+    // Si Android optimiza la batería de la app, con la pantalla apagada puede espaciar las
+    // posiciones del GPS aunque el servicio siga vivo: se ofrece quitarlo (se mira al volver).
+    var batteryOptimized by remember { mutableStateOf(isBatteryOptimized(context)) }
+    LifecycleResumeEffect(Unit) { batteryOptimized = isBatteryOptimized(context); onPauseOrDispose {} }
 
     val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Recording.start(context) }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -126,17 +145,26 @@ fun TracksScreen() {
                 }
             }
         }
+        if (batteryOptimized) item {
+            TonalCard(Modifier.padding(horizontal = side)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.BatteryAlert, null, tint = MaterialTheme.colorScheme.tertiary)
+                        Text("  Para grabar con la pantalla apagada", fontWeight = FontWeight.Bold)
+                    }
+                    Text("Android está optimizando la batería de IGN GPS: con la pantalla apagada puede tardar en darle posiciones y el track saldría a saltos. Quitarlo sólo gasta más mientras grabas (con el GPS apagado no hace nada).",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = { requestNoBatteryOptimization(context) }) { Text("Quitar la optimización de batería") }
+                }
+            }
+        }
         if (list.isEmpty()) item {
             Text("Todavía no hay tracks guardados.", Modifier.padding(horizontal = side, vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         itemsIndexed(list, key = { _, t -> t.file.name }) { i, t ->
             val recordingThis = rec.active && rec.file == t.file
-            TrackRow(Modifier.padding(horizontal = side), i, t, recordingThis, onOpen = { Tracks.open(t.file) }, onDelete = { toDelete = t }, onShare = {
-                val uri = FileProvider.getUriForFile(context, context.packageName + ".files", t.file)
-                val send = Intent(Intent.ACTION_SEND).setType("application/gpx+xml").putExtra(Intent.EXTRA_STREAM, uri)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                context.startActivity(Intent.createChooser(send, t.name))
-            })
+            TrackRow(Modifier.padding(horizontal = side), i, t, recordingThis, onOpen = { details = t }, onMap = { Tracks.open(t.file) },
+                onDelete = { toDelete = t }, onShare = { share(t) })
         }
     }
 
@@ -147,12 +175,31 @@ fun TracksScreen() {
             confirmButton = { TextButton(onClick = { Tracks.delete(t.file); toDelete = null }) { Text("Borrar") } },
             dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Cancelar") } })
     }
+
+    details?.let { t ->
+        TrackDetailSheet(t, onDismiss = { details = null }, onShowOnMap = { details = null; Tracks.open(t.file) }, onShare = { share(t) })
+    }
+}
+
+private fun isBatteryOptimized(context: Context): Boolean =
+    !context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
+
+/**
+ * El diálogo del sistema que pregunta directamente (no hay Play Store que lo prohíba: la app no va a
+ * Google Play). Si el sistema no lo tiene, la lista de apps de la optimización.
+ */
+@android.annotation.SuppressLint("BatteryLife")
+private fun requestNoBatteryOptimization(context: Context) {
+    val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, ("package:" + context.packageName).toUri())
+    runCatching { context.startActivity(direct) }.onFailure {
+        runCatching { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+    }
 }
 
 private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm")
 
 @Composable
-private fun TrackRow(modifier: Modifier, index: Int, t: TrackInfo, recording: Boolean, onOpen: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit) {
+private fun TrackRow(modifier: Modifier, index: Int, t: TrackInfo, recording: Boolean, onOpen: () -> Unit, onMap: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     // Cada fila con un color del tema para el icono, por turnos: más vivo que una lista gris.
     val c = MaterialTheme.colorScheme
@@ -177,6 +224,7 @@ private fun TrackRow(modifier: Modifier, index: Int, t: TrackInfo, recording: Bo
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Más") }
                 DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                    if (t.points > 0) DropdownMenuItem(text = { Text("Ver en el mapa") }, leadingIcon = { Icon(Icons.Filled.Map, null) }, onClick = { menu = false; onMap() })
                     DropdownMenuItem(text = { Text("Compartir GPX") }, leadingIcon = { Icon(Icons.Filled.Share, null) }, onClick = { menu = false; onShare() })
                     if (!recording) DropdownMenuItem(text = { Text("Borrar") }, leadingIcon = { Icon(Icons.Filled.Delete, null) }, onClick = { menu = false; onDelete() })
                 }
