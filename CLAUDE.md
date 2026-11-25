@@ -31,10 +31,21 @@ proyectos; aquí va lo propio de esta.
   espacio o si un zoom entero falla.
 - **Mapa** (`ui/MapScreen`): `MapView` en `AndroidView`, `isTilesScaledToDpi` (por eso el zoom
   máximo es el de la capa: ya se ve ampliado), escala y atribución. Lo de encima de las teselas
-  (rótulos, tracks, puntos, posición) está en `ui/MapScene`, compartido con el coche (`car/`). Seguir se quita al arrastrar (`ACTION_MOVE`). La rueda del ratón hace zoom (`wheelZoom`).
+  (rótulos, tracks, puntos, posición) está en `ui/MapScene`, compartido con el coche (`car/`). Seguir se quita al arrastrar (`ACTION_MOVE`). La rueda del ratón hace zoom (`WheelZoom`: estira la vista y aplica el zoom al parar).
 - Interfaz sólo en español (como ZeroGPS). Material 3 Expressive con los colores del sistema.
 
 ## Estado
+
+**0.4.3 (25-nov-2026): la rueda ya no da saltos.** Bruno: «funciona perfecto, pero en movimientos
+rápidos o largos hay bastantes saltos al recargar las teselas». Aplicar el zoom golpe a golpe
+hacía que cada nivel entero cruzado pidiera sus teselas (`MapView.setZoomLevel` → `rescaleCache`
+y peticiones nuevas): la cola se llenaba de niveles intermedios y los rótulos, que van en otro
+proveedor sin `rescaleCache`, se borraban y volvían. Ahora (`WheelZoom` en `ui/MapScreen`)
+mientras se gira sólo se estira la vista (`scaleX`/`scaleY` con pivote en el cursor del primer
+golpe, como osmdroid al pellizcar) y a los 200 ms sin golpes se aplica el zoom de una vez; tocar
+el mapa lo aplica en el acto. Probado en el emulador con la release: 12 golpes z6 → z12, en una
+esquina sin seguir −2, tres golpes y toque +1,5, veinte golpes al máximo (z17+). **Sin probar en
+el móvil.**
 
 **0.4.2 (25-nov-2026): zoom con la rueda del ratón.** Bruno: «que la rueda del ratón en modo
 escritorio cambie el zoom». osmdroid 6.1.20 no atiende `ACTION_SCROLL`: un
@@ -42,8 +53,8 @@ escritorio cambie el zoom». osmdroid 6.1.20 no atiende `ACTION_SCROLL`: un
 mandan fracciones) y deja quieto el punto bajo el cursor (`MapTiles.zoomAnchoredCenter`, con su
 prueba); siguiendo la posición, por el centro. Sin animar: `zoomToFixing` descarta lo que llega
 mientras anima (`mIsAnimating`) y la rueda iría a saltos. Probado en el emulador con la release
-(`adb shell input mouse scroll x y --axis VSCROLL,1`: z6 → z7 → z5, el mínimo). **Sin probar en el
-móvil** (modo escritorio con ratón de verdad).
+(`adb shell input mouse scroll x y --axis VSCROLL,1`: z6 → z7 → z5, el mínimo). **Probado en el
+móvil por Bruno (25-nov-2026)**: «funciona perfecto», salvo los saltos que arregla la 0.4.3.
 
 **0.4.1 (24-nov-2026): textos legibles en modo oscuro.** Bruno: «en la pestaña de tracks sobre
 todo no se lee prácticamente nada en modo oscuro». La paleta estaba bien; lo que faltaba era una

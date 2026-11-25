@@ -102,6 +102,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.ScaleBarOverlay
+import kotlin.math.pow
 
 @SuppressLint("ClickableViewAccessibility")
 @Composable
@@ -159,7 +160,13 @@ fun MapScreen() {
             overlays += ScaleBarOverlay(this).apply {
                 setAlignRight(true); setScaleBarOffset((16 * density).toInt(), (topInsetPx + 14 * density).toInt())
             }
-            setOnTouchListener { _, e -> if (e.actionMasked == MotionEvent.ACTION_MOVE) follow = false; false }
+            val wheel = WheelZoom(this)
+            setOnTouchListener { _, e ->
+                // Tocar a medio zoom con la rueda: se aplica ya, para no arrastrar un mapa estirado.
+                if (e.actionMasked == MotionEvent.ACTION_DOWN) wheel.commit()
+                if (e.actionMasked == MotionEvent.ACTION_MOVE) follow = false
+                false
+            }
             // La rueda del ratón (modo escritorio) acerca y aleja; osmdroid no la atiende.
             setOnGenericMotionListener { v, e ->
                 if (e.actionMasked != MotionEvent.ACTION_SCROLL) return@setOnGenericMotionListener false
@@ -167,8 +174,8 @@ fun MapScreen() {
                 if (ticks == 0f) return@setOnGenericMotionListener false
                 // Siguiendo tu posición se acerca por el centro (sigues en medio); si no, por
                 // donde está el cursor, como en un mapa de escritorio.
-                if (follow) wheelZoom(v as MapView, ticks, v.width / 2f, v.height / 2f)
-                else wheelZoom(v as MapView, ticks, e.x, e.y)
+                if (follow) wheel.onWheel(ticks, v.width / 2f, v.height / 2f)
+                else wheel.onWheel(ticks, e.x, e.y)
                 true
             }
             addMapListener(object : MapListener {
@@ -336,18 +343,46 @@ fun MapScreen() {
 }
 
 /**
- * Medio nivel de zoom por golpe de rueda (los touchpads mandan fracciones), sin animar: la
- * animación de osmdroid descarta lo que llega mientras dura y la rueda giraría «a saltos».
+ * Zoom con la rueda, medio nivel por golpe (los touchpads mandan fracciones). Mientras se gira, el
+ * mapa sólo se estira como una imagen alrededor del cursor, como osmdroid al pellizcar; al parar
+ * [SETTLE_MS] se aplica el zoom de una vez, fijando el punto que había bajo el cursor. Aplicarlo
+ * golpe a golpe pedía las teselas de cada nivel intermedio (la cola se llenaba de teselas que ya
+ * no hacían falta y los rótulos se borraban y volvían): eso eran los saltos en giros largos.
+ * Tampoco vale la animación de osmdroid: descarta lo que llega mientras dura.
  */
-private fun wheelZoom(map: MapView, ticks: Float, x: Float, y: Float) {
-    val old = map.zoomLevelDouble
-    val new = (old + ticks * 0.5).coerceIn(map.minZoomLevel, map.maxZoomLevel)
-    if (new == old) return
-    val anchor = map.projection.fromPixels(x.toInt(), y.toInt())
-    val center = map.mapCenter
-    val (lat, lon) = MapTiles.zoomAnchoredCenter(center.latitude, center.longitude, anchor.latitude, anchor.longitude, new - old)
-    map.controller.setZoom(new)
-    map.controller.setCenter(GeoPoint(lat, lon))
+private class WheelZoom(private val map: MapView) {
+    private var pending = 0.0
+    private var px = 0f
+    private var py = 0f
+    private val settle = Runnable { commit() }
+
+    fun onWheel(ticks: Float, x: Float, y: Float) {
+        val z = map.zoomLevelDouble
+        // El punto fijo es el del primer golpe: con la vista ya estirada, mover el pivote la
+        // haría saltar (y las coordenadas del evento llegan ya transformadas por la escala).
+        if (pending == 0.0) { px = x; py = y }
+        pending = (z + pending + ticks * 0.5).coerceIn(map.minZoomLevel, map.maxZoomLevel) - z
+        val s = 2.0.pow(pending).toFloat()
+        map.pivotX = px; map.pivotY = py
+        map.scaleX = s; map.scaleY = s
+        map.removeCallbacks(settle)
+        map.postDelayed(settle, SETTLE_MS)
+    }
+
+    fun commit() {
+        map.removeCallbacks(settle)
+        val d = pending
+        pending = 0.0
+        map.scaleX = 1f; map.scaleY = 1f
+        if (d == 0.0) return
+        val anchor = map.projection.fromPixels(px.toInt(), py.toInt())
+        val center = map.mapCenter
+        val (lat, lon) = MapTiles.zoomAnchoredCenter(center.latitude, center.longitude, anchor.latitude, anchor.longitude, d)
+        map.controller.setZoom(map.zoomLevelDouble + d)
+        map.controller.setCenter(GeoPoint(lat, lon))
+    }
+
+    private companion object { const val SETTLE_MS = 200L }
 }
 
 private fun styleIcon(s: MapStyle) = when (s) {
