@@ -28,13 +28,23 @@ proyectos; aquí va lo propio de esta.
   de seguridad); recorte de osmdroid subido a 64 GB (de serie lo deja en 500 MB y se comería las
   descargas); caducidad forzada a un año. **Descarga propia** (no `CacheManager`): 3 peticiones a
   la vez, salta lo guardado y sin caducar (repetir = reanudar), comprueba `FF D8`, para con poco
-  espacio o si un zoom entero falla.
+  espacio o si un zoom entero falla. En memoria, margen de 96 teselas sobre las visibles (`cacheMapTileOvershoot`) y colas de 120.
 - **Mapa** (`ui/MapScreen`): `MapView` en `AndroidView`, `isTilesScaledToDpi` (por eso el zoom
   máximo es el de la capa: ya se ve ampliado), escala y atribución. Lo de encima de las teselas
   (rótulos, tracks, puntos, posición) está en `ui/MapScene`, compartido con el coche (`car/`). Seguir se quita al arrastrar (`ACTION_MOVE`). La rueda del ratón hace zoom (`WheelZoom`: estira la vista y aplica el zoom al parar).
 - Interfaz sólo en español (como ZeroGPS). Material 3 Expressive con los colores del sistema.
 
 ## Estado
+
+**0.4.4 (25-nov-2026): arrastrar sin tantos saltos.** Bruno, tras la 0.4.3: «para el zoom está
+bien, para el movimiento sigue igual». osmdroid dimensiona la caché de teselas en memoria a las
+que se ven (`TilesOverlay` → `ensureCapacity(visibles + cacheTileOvershoot)`, y el margen es 0):
+al arrastrar, lo que salía por un borde se tiraba y al volver se releía con hueco gris. Ahora
+`cacheMapTileOvershoot = 96` (unos 25 MB más por capa) y las colas de lectura y descarga a 120
+(de serie 40, cortas en una ventana grande de escritorio con mapa y rótulos). Lo nuevo que entra
+por el borde sin estar en el disco sigue tardando lo que tarde el IGN. En el emulador abre y
+arrastra sin cierres, pero sin ventana no pinta fotogramas (`gfxinfo` da 0) y los tirones no se
+pueden medir ahí. **Sin probar en el móvil.**
 
 **0.4.3 (25-nov-2026): la rueda ya no da saltos.** Bruno: «funciona perfecto, pero en movimientos
 rápidos o largos hay bastantes saltos al recargar las teselas». Aplicar el zoom golpe a golpe
@@ -44,8 +54,8 @@ proveedor sin `rescaleCache`, se borraban y volvían. Ahora (`WheelZoom` en `ui/
 mientras se gira sólo se estira la vista (`scaleX`/`scaleY` con pivote en el cursor del primer
 golpe, como osmdroid al pellizcar) y a los 200 ms sin golpes se aplica el zoom de una vez; tocar
 el mapa lo aplica en el acto. Probado en el emulador con la release: 12 golpes z6 → z12, en una
-esquina sin seguir −2, tres golpes y toque +1,5, veinte golpes al máximo (z17+). **Sin probar en
-el móvil.**
+esquina sin seguir −2, tres golpes y toque +1,5, veinte golpes al máximo (z17+). **Probado en el
+móvil por Bruno (25-nov-2026)**: el zoom, bien.
 
 **0.4.2 (25-nov-2026): zoom con la rueda del ratón.** Bruno: «que la rueda del ratón en modo
 escritorio cambie el zoom». osmdroid 6.1.20 no atiende `ACTION_SCROLL`: un

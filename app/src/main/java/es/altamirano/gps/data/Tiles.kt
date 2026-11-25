@@ -72,6 +72,14 @@ object Tiles {
             // a pedir y sin cobertura no se verían mejor).
             expirationOverrideDuration = 365L * 24 * 3600 * 1000
             tileDownloadThreads = 4
+            // Arrastrar daba saltos: osmdroid guarda en memoria justo las teselas que se ven
+            // (margen 0), así que las que salían por un borde se tiraban y, al volver, había que
+            // leerlas otra vez con su hueco gris. Con margen se queda lo de alrededor (~256 KB por
+            // tesela: 96 más son ~25 MB por capa). Las colas de 40 se quedan cortas en una
+            // ventana grande de escritorio con dos capas (mapa y rótulos).
+            cacheMapTileOvershoot = 96
+            tileFileSystemMaxQueueSize = 120
+            tileDownloadMaxQueueSize = 120
         }
     }
 
