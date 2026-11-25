@@ -44,7 +44,7 @@ al arrastrar, lo que salía por un borde se tiraba y al volver se releía con hu
 (de serie 40, cortas en una ventana grande de escritorio con mapa y rótulos). Lo nuevo que entra
 por el borde sin estar en el disco sigue tardando lo que tarde el IGN. En el emulador abre y
 arrastra sin cierres, pero sin ventana no pinta fotogramas (`gfxinfo` da 0) y los tirones no se
-pueden medir ahí. **Sin probar en el móvil.**
+pueden medir ahí. **Probado por Bruno (25-nov-2026: «está probado y va bien»).**
 
 **0.4.3 (25-nov-2026): la rueda ya no da saltos.** Bruno: «funciona perfecto, pero en movimientos
 rápidos o largos hay bastantes saltos al recargar las teselas». Aplicar el zoom golpe a golpe
@@ -71,7 +71,7 @@ todo no se lee prácticamente nada en modo oscuro». La paleta estaba bien; lo q
 `Surface` (o `Scaffold`) en la raíz: sin ella `LocalContentColor` se queda en el negro de serie de
 Compose y todo `Text` sin color propio (nombre y datos de cada track, «Puntos», la tarjeta de la
 batería…) salía negro sobre el fondo oscuro. Ahora `MainActivity` envuelve la app en una `Surface`
-con `surface`, que pone `onSurface`. **Sin probar en el móvil.**
+con `surface`, que pone `onSurface`. **Probado por Bruno (25-nov-2026: «está probado y va bien»).**
 
 **0.4.0 (24-nov-2026): Android Auto y puntos.** Lo pidió Bruno («android auto a la app de mapas
 ign» y «poder guardar puntos en el mapa y que me diga dirección y distancia»).
@@ -104,9 +104,7 @@ ign» y «poder guardar puntos en el mapa y que me diga dirección y distancia»
 - 15 pruebas (3 nuevas: rumbo y punto cardinal, a qué mano, GPX de puntos) y lint sin errores.
   **Probado en el emulador con la release**: abre; guardar con el botón y con pulsación larga;
   la lista de Tracks por distancia; la ficha; «Ir hacia aquí» y la píldora («208,9 km al N · de
-  frente»); el `CarAppService` queda registrado con la categoría NAVIGATION. **Sin probar en el
-  coche** (aquí no hay Android Auto ni DHU) **ni en el móvil** (brújula de verdad, renombrar,
-  borrar, compartir, importar `<wpt>`).
+  frente»); el `CarAppService` queda registrado con la categoría NAVIGATION. **Probado por Bruno (25-nov-2026: «está probado y va bien»).**
 
 **0.3.0 (24-nov-2026): híbrido, ficha de los tracks y batería.** Lo pidió Bruno («vamos a acabar
 con gpsdroid»): las ideas que quedaban.
@@ -148,7 +146,7 @@ con gpsdroid»): las ideas que quedaban.
 el móvil de Bruno daba una paleta gris y lo seleccionado (chips de Offline, interruptores) no se
 distinguía: quiere verde clarito. Ahora verde de monte + azul de agua fijos, y lo seleccionado con
 `withBrandSelection`. Las piezas de diseño (`glass`, `Header`, `TonalCard`, `AppTheme`) pasaron a
-`droid-common` para que las usen todas las apps. **Sin probar en el móvil.**
+`droid-common` para que las usen todas las apps. **Probado por Bruno (25-nov-2026: «está probado y va bien»).**
 
 **0.2.0 (22-nov-2026): aspecto Material 3 Expressive.** Lo pidió Bruno («guías de diseño de
 Android 17, algo más colorido y translúcido»). material3 1.5.0-rc01 (como VideoDroid) con
@@ -178,8 +176,7 @@ desplazarse (`statusBarsPadding` iba dentro del scroll).
 abrir / compartir / importar / borrar tracks y descarga de zonas. 8 pruebas en verde y lint sin
 errores. Clave nueva `gps-release` (copiada a `~/Documentos/Software/ClavesAndroid`). Instalada en el
 móvil por adb. **Visto en el móvil (22-nov-2026)**: el mapa pinta las teselas del IGN (las tres
-capas), escala y atribución; descarga de zonas. **Sin probar en el móvil**: grabar un track
-(y que siga con la pantalla apagada), abrir/compartir/importar, la pantalla de satélites con fix.
+capas), escala y atribución; descarga de zonas. Lo demás (grabar, importar, satélites) lo da por bueno Bruno el 25-nov-2026.
 
 
 Ideas, si hicieran falta: pintar en el mapa el punto marcado en el perfil; en el coche, mapa orientado hacia donde vas.
