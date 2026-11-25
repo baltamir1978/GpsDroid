@@ -104,7 +104,16 @@ ign» y «poder guardar puntos en el mapa y que me diga dirección y distancia»
 - 15 pruebas (3 nuevas: rumbo y punto cardinal, a qué mano, GPX de puntos) y lint sin errores.
   **Probado en el emulador con la release**: abre; guardar con el botón y con pulsación larga;
   la lista de Tracks por distancia; la ficha; «Ir hacia aquí» y la píldora («208,9 km al N · de
-  frente»); el `CarAppService` queda registrado con la categoría NAVIGATION. **Probado por Bruno (25-nov-2026: «está probado y va bien»).**
+  frente»); el `CarAppService` queda registrado con la categoría NAVIGATION. En el móvil, los puntos van
+  bien (Bruno, 25-nov-2026). **En el coche no aparece** (Bruno, 25-nov-2026; FMDroid sí): el APK
+  está bien (la release firmada lleva servicio, categoría, permisos y `automotive_app_desc` con
+  `template`), pero Android Auto clasifica las apps de la Car App Library como TEMPLATE y
+  **«Fuentes desconocidas» no las cubre** (sólo multimedia, mensajes y poco más: por eso la radio
+  sí sale). Para TEMPLATE exige que Google Play avale la app (que esté en la biblioteca de Play de
+  una cuenta del móvil, con la misma firma) o un DHU. Según lo publicado por Fermata y Vela
+  (ingeniería inversa de AA 17.4-17.7), en GrapheneOS no funcionan ni `adb install -i
+  com.android.vending` ni KingInstaller. Salidas: pista de pruebas internas de Google Play,
+  MyCar/GearSlip en lugar de Android Auto, o una radio con Android completo.
 
 **0.3.0 (24-nov-2026): híbrido, ficha de los tracks y batería.** Lo pidió Bruno («vamos a acabar
 con gpsdroid»): las ideas que quedaban.

@@ -42,8 +42,8 @@
 
         <service android:name=".data.TrackService" android:exported="false" android:foregroundServiceType="location" />
 
-        <!-- Android Auto. Para que salga una app que no viene de Google Play hay que activar
-             «Fuentes desconocidas» en los ajustes de desarrollador de Android Auto. -->
+        <!-- Android Auto. Ojo: «Fuentes desconocidas» de Android Auto NO basta para las apps de la
+             Car App Library (las trata como TEMPLATE): sólo salen si Google Play las avala. Ver CLAUDE.md. -->
         <!-- Sin permiso a propósito: quien se conecta lo filtra el HostValidator (sólo anfitriones conocidos). -->
         <service android:name=".car.GpsCarAppService" android:exported="true" tools:ignore="ExportedService">
             <intent-filter>
