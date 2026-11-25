@@ -114,6 +114,13 @@ ign» y «poder guardar puntos en el mapa y que me diga dirección y distancia»
   (ingeniería inversa de AA 17.4-17.7), en GrapheneOS no funcionan ni `adb install -i
   com.android.vending` ni KingInstaller. Salidas: pista de pruebas internas de Google Play,
   MyCar/GearSlip en lugar de Android Auto, o una radio con Android completo.
+  **Confirmado en el móvil el 25-nov-2026** (adb desde el Cardputer, AA 18.0, Android Auto
+  inalámbrico): `adb shell dumpsys activity service com.google.android.projection.gearhead` →
+  `CarProjectionValidator`, `unknownSourcesEnabled=true` y en «denied packages»
+  `pkg=es.altamirano.gps error=PACKAGE_FAILED_ALL_CHECKS`. Sigue igual (tras `am force-stop` de
+  AA) instalándola con instalador Play (`adb install -i com.android.vending`), por adb a secas
+  (instalador `null`) y con una compilación de depuración (`.debug`, *debuggable*). El
+  manifiesto no tiene nada mal: no merece la pena seguir tocándolo; sólo Play lo arregla.
 
 **0.3.0 (24-nov-2026): híbrido, ficha de los tracks y batería.** Lo pidió Bruno («vamos a acabar
 con gpsdroid»): las ideas que quedaban.
