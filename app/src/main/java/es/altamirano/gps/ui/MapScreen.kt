@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import es.altamirano.common.ui.glass
 import es.altamirano.gps.core.MapLayer
 import es.altamirano.gps.core.MapStyle
+import es.altamirano.gps.core.MapTiles
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
@@ -159,6 +160,17 @@ fun MapScreen() {
                 setAlignRight(true); setScaleBarOffset((16 * density).toInt(), (topInsetPx + 14 * density).toInt())
             }
             setOnTouchListener { _, e -> if (e.actionMasked == MotionEvent.ACTION_MOVE) follow = false; false }
+            // La rueda del ratón (modo escritorio) acerca y aleja; osmdroid no la atiende.
+            setOnGenericMotionListener { v, e ->
+                if (e.actionMasked != MotionEvent.ACTION_SCROLL) return@setOnGenericMotionListener false
+                val ticks = e.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                if (ticks == 0f) return@setOnGenericMotionListener false
+                // Siguiendo tu posición se acerca por el centro (sigues en medio); si no, por
+                // donde está el cursor, como en un mapa de escritorio.
+                if (follow) wheelZoom(v as MapView, ticks, v.width / 2f, v.height / 2f)
+                else wheelZoom(v as MapView, ticks, e.x, e.y)
+                true
+            }
             addMapListener(object : MapListener {
                 override fun onScroll(event: ScrollEvent?) = false
                 override fun onZoom(event: ZoomEvent?): Boolean { zoom = zoomLevelDouble; return false }
@@ -321,6 +333,21 @@ fun MapScreen() {
         if (current == null) selected = null
         else WaypointSheet(current, location, isTarget = target?.id == current.id, onDismiss = { selected = null })
     }
+}
+
+/**
+ * Medio nivel de zoom por golpe de rueda (los touchpads mandan fracciones), sin animar: la
+ * animación de osmdroid descarta lo que llega mientras dura y la rueda giraría «a saltos».
+ */
+private fun wheelZoom(map: MapView, ticks: Float, x: Float, y: Float) {
+    val old = map.zoomLevelDouble
+    val new = (old + ticks * 0.5).coerceIn(map.minZoomLevel, map.maxZoomLevel)
+    if (new == old) return
+    val anchor = map.projection.fromPixels(x.toInt(), y.toInt())
+    val center = map.mapCenter
+    val (lat, lon) = MapTiles.zoomAnchoredCenter(center.latitude, center.longitude, anchor.latitude, anchor.longitude, new - old)
+    map.controller.setZoom(new)
+    map.controller.setCenter(GeoPoint(lat, lon))
 }
 
 private fun styleIcon(s: MapStyle) = when (s) {

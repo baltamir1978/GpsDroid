@@ -16,7 +16,8 @@ ubicación por red ni servicios de Google.
   - **IGN Base**: el mapa base vectorial (hasta z18).
 
   Tu posición con su precisión y, si te mueves, hacia dónde vas; seguir la posición, el nivel de
-  zoom, la escala, y un botón para no usar la red (sólo lo guardado, sin gastar datos).
+  zoom, la escala, y un botón para no usar la red (sólo lo guardado, sin gastar datos). En modo escritorio, la
+  rueda del ratón acerca y aleja por donde está el cursor.
 - **Satélites**: el cielo con los satélites a la vista y los que se usan, por constelación, y el
   fix (coordenadas, altitud, precisión).
 - **Tracks**: grabar por dónde vas (sigue con la pantalla apagada; se guarda cada minuto),

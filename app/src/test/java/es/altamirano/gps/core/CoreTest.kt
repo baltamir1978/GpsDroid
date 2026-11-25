@@ -22,6 +22,24 @@ class CoreTest {
         assertTrue(m > 0.8 && m < 1.0)
     }
 
+    @Test fun zoomConLaRuedaFijaElCursor() {
+        // El ancla debe quedar a la misma distancia en píxeles del centro antes y después.
+        val (cLat, cLon) = 40.4168 to -3.7038
+        val (aLat, aLon) = 40.45 to -3.65
+        for (d in listOf(0.5, -0.5, 1.0, -2.0)) {
+            val z = 12.0
+            val (nLat, nLon) = MapTiles.zoomAnchoredCenter(cLat, cLon, aLat, aLon, d)
+            val k0 = Math.pow(2.0, z); val k1 = Math.pow(2.0, z + d)
+            assertEquals((MapTiles.lonToTileX(aLon, 0) - MapTiles.lonToTileX(cLon, 0)) * k0,
+                (MapTiles.lonToTileX(aLon, 0) - MapTiles.lonToTileX(nLon, 0)) * k1, 1e-6)
+            assertEquals((MapTiles.latToTileY(aLat, 0) - MapTiles.latToTileY(cLat, 0)) * k0,
+                (MapTiles.latToTileY(aLat, 0) - MapTiles.latToTileY(nLat, 0)) * k1, 1e-6)
+        }
+        // Con el ancla en el centro, el centro no se mueve.
+        val (lat, lon) = MapTiles.zoomAnchoredCenter(cLat, cLon, cLat, cLon, 1.0)
+        assertEquals(cLat, lat, 1e-9); assertEquals(cLon, lon, 1e-9)
+    }
+
     @Test fun urlsDeLasCapas() {
         val topo = MapLayer.TOPO.tileUrl(12, 2005, 1538)
         assertTrue(topo.contains("mapa-raster?") && topo.contains("layer=MTN"))

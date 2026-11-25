@@ -31,10 +31,19 @@ proyectos; aquí va lo propio de esta.
   espacio o si un zoom entero falla.
 - **Mapa** (`ui/MapScreen`): `MapView` en `AndroidView`, `isTilesScaledToDpi` (por eso el zoom
   máximo es el de la capa: ya se ve ampliado), escala y atribución. Lo de encima de las teselas
-  (rótulos, tracks, puntos, posición) está en `ui/MapScene`, compartido con el coche (`car/`). Seguir se quita al arrastrar (`ACTION_MOVE`).
+  (rótulos, tracks, puntos, posición) está en `ui/MapScene`, compartido con el coche (`car/`). Seguir se quita al arrastrar (`ACTION_MOVE`). La rueda del ratón hace zoom (`wheelZoom`).
 - Interfaz sólo en español (como ZeroGPS). Material 3 Expressive con los colores del sistema.
 
 ## Estado
+
+**0.4.2 (25-nov-2026): zoom con la rueda del ratón.** Bruno: «que la rueda del ratón en modo
+escritorio cambie el zoom». osmdroid 6.1.20 no atiende `ACTION_SCROLL`: un
+`setOnGenericMotionListener` en el `MapView` sube o baja medio nivel por golpe (los touchpads
+mandan fracciones) y deja quieto el punto bajo el cursor (`MapTiles.zoomAnchoredCenter`, con su
+prueba); siguiendo la posición, por el centro. Sin animar: `zoomToFixing` descarta lo que llega
+mientras anima (`mIsAnimating`) y la rueda iría a saltos. Probado en el emulador con la release
+(`adb shell input mouse scroll x y --axis VSCROLL,1`: z6 → z7 → z5, el mínimo). **Sin probar en el
+móvil** (modo escritorio con ratón de verdad).
 
 **0.4.1 (24-nov-2026): textos legibles en modo oscuro.** Bruno: «en la pestaña de tracks sobre
 todo no se lee prácticamente nada en modo oscuro». La paleta estaba bien; lo que faltaba era una

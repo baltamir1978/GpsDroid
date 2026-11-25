@@ -38,6 +38,19 @@ object MapTiles {
         return Tile(z, floor(lonToTileX(lon, z)).toInt().coerceIn(0, max), floor(latToTileY(lat, z)).toInt().coerceIn(0, max))
     }
 
+    /**
+     * El centro nuevo al cambiar el zoom en [deltaZoom] niveles sin que se mueva de la pantalla el
+     * punto [anchorLat], [anchorLon] (el que está bajo el cursor), como hace un mapa de escritorio
+     * con la rueda. En coordenadas Mercator la distancia en pantalla al centro se multiplica por
+     * 2^Δ, así que el centro se acerca al ancla en esa proporción. Devuelve lat, lon.
+     */
+    fun zoomAnchoredCenter(centerLat: Double, centerLon: Double, anchorLat: Double, anchorLon: Double, deltaZoom: Double): Pair<Double, Double> {
+        val s = Math.pow(2.0, deltaZoom)
+        val cx = lonToTileX(centerLon, 0); val cy = latToTileY(centerLat, 0)
+        val ax = lonToTileX(anchorLon, 0); val ay = latToTileY(anchorLat, 0)
+        return tileYToLat(ay - (ay - cy) / s, 0) to tileXToLon(ax - (ax - cx) / s, 0)
+    }
+
     /** Metros que mide un píxel del mapa a esa latitud y zoom. */
     fun metersPerPixel(lat: Double, z: Int) = 40075016.686 * cos(lat * PI / 180.0) / (TILE_SIZE * n(z))
 }
