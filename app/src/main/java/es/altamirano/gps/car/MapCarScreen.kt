@@ -22,6 +22,7 @@ import androidx.car.app.navigation.model.MessageInfo
 import androidx.car.app.navigation.NavigationManager
 import androidx.car.app.navigation.NavigationManagerCallback
 import es.altamirano.gps.data.Routing
+import es.altamirano.gps.data.RoutePreview
 import es.altamirano.gps.data.Tiles
 import es.altamirano.gps.core.TravelMode
 import androidx.car.app.navigation.model.RoutingInfo
@@ -96,6 +97,10 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                 renderer.release()
             }
         })
+        // Las rutas posibles (al elegir destino o con el botón de las dos flechas), en el mapa del coche.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { RoutePreview.state.collect { renderer.showPreview(it) } }
+        }
         // Los ajustes de radares (clases, encendido) cambian lo que se pinta en el mapa.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { es.altamirano.gps.data.Radars.settingsFlow(carContext).collect { renderer.radarsChanged() } }
@@ -112,6 +117,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                             navigating = navNow
                             runCatching { if (navNow) nav.navigationStarted() else nav.navigationEnded() }
                             if (navNow) renderer.follow = true
+                            invalidate()
                         }
                         if ((fol != null) != following) { following = fol != null; invalidate() }
                         val newCard = cardFor(loc, t, rec, fol)
@@ -190,8 +196,10 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             // Con una ruta o un track en marcha, este botón es el de pararlo (guardar un punto conduciendo es lo de menos).
             .addAction(if (following) icon(R.drawable.car_close, CarColor.RED) { Following.stop(carContext) }
                 else icon(R.drawable.car_add_place) { savePoint() })
-            .addAction(icon(if (recording) R.drawable.car_stop else R.drawable.car_record,
-                if (recording) CarColor.RED else CarColor.DEFAULT) { toggleRecording() })
+            // Yendo por una ruta, el botón de las dos flechas (otras rutas desde aquí) en vez del de grabar.
+            .addAction(if (navigating) icon(R.drawable.car_alt_route) { otherRoutes() }
+                else icon(if (recording) R.drawable.car_stop else R.drawable.car_record,
+                    if (recording) CarColor.RED else CarColor.DEFAULT) { toggleRecording() })
             .build()
         val mapStrip = ActionStrip.Builder()
             .addAction(Action.PAN)
@@ -282,14 +290,23 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             when (r) {
                 is Routing.Result.Ok -> {
                     Waypoints.setTarget(null)
-                    val err = Following.startRoute(carContext, r.route, w.name, w.lat, w.lon, TravelMode.CAR)
-                    if (err != null) beeline(w, "$err: te indico la dirección")
-                    else CarToast.makeText(carContext, "${Geo.formatDistance(es.altamirano.gps.core.FollowRoute(r.route.points).totalM)} hasta «${w.name}»",
-                        CarToast.LENGTH_SHORT).show()
+                    // Como Waze: todas las rutas posibles en el mapa, a elegir; «Empezar» va por la elegida.
+                    RoutePreview.show(carContext, r.route, w.name, w.lat, w.lon, TravelMode.CAR, from, here.travelHeading(1f))
+                    screenManager.push(RouteChoiceCarScreen(carContext))
                 }
                 is Routing.Result.Failed -> beeline(w, "${r.message}: te indico la dirección")
                 is Routing.Result.MissingTiles -> beeline(w, "Faltan los datos de rutas de esta zona: te indico la dirección")
             }
+        }
+    }
+
+    /** Las otras rutas posibles desde donde estás hasta el mismo destino. */
+    private fun otherRoutes() {
+        CarToast.makeText(carContext, "Buscando rutas…", CarToast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val err = RoutePreview.fromNavigation(carContext)
+            if (err != null) CarToast.makeText(carContext, err, CarToast.LENGTH_LONG).show()
+            else screenManager.push(RouteChoiceCarScreen(carContext))
         }
     }
 

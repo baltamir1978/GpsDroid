@@ -100,6 +100,8 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material.icons.filled.AddLocationAlt
+import androidx.compose.material.icons.filled.AltRoute
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -249,7 +251,8 @@ fun MapScreen() {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { scene.setRadars(context) }
         mapView.invalidate()
     }
-    LaunchedEffect(preview?.current) { scene.setTrack(scene.preview, preview?.current?.route?.points.orEmpty()); mapView.invalidate() }
+    // Todas las rutas posibles a la vez: la elegida, fuerte; las otras, claras y se eligen tocándolas.
+    LaunchedEffect(preview?.options, preview?.selected) { scene.setPreview(mapView, preview) { RoutePreview.select(it) }; mapView.invalidate() }
     // La ruta en vista previa, entera (con tu posición, que es donde empieza).
     LaunchedEffect(previewFit) {
         val pts = preview?.current?.route?.points ?: return@LaunchedEffect
@@ -345,13 +348,32 @@ fun MapScreen() {
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             preview?.let { p ->
                 RoutePreviewCard(p, Modifier.padding(horizontal = 12.dp).widthIn(max = 520.dp),
-                    onNext = { RoutePreview.next(context) }, onCancel = { RoutePreview.cancel() },
+                    onSelect = { RoutePreview.select(it) }, onCancel = { RoutePreview.cancel() },
                     onStart = {
                         if (Build.VERSION.SDK_INT >= 33) startRoute.launch(Manifest.permission.POST_NOTIFICATIONS)
                         else RoutePreview.start(context)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
                     })
             }
-            if (preview == null) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
+            if (preview == null) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically) {
+                // Yendo por una ruta: el botón de las dos flechas (como Waze) para ver las otras rutas
+                // desde donde estás y cambiar a otra.
+                if (following?.nav != null) {
+                    var searching by remember { mutableStateOf(false) }
+                    val scope = androidx.compose.runtime.rememberCoroutineScope()
+                    androidx.compose.material3.FloatingActionButton(onClick = {
+                        if (searching) return@FloatingActionButton
+                        searching = true
+                        scope.launch {
+                            RoutePreview.fromNavigation(context)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+                            searching = false
+                        }
+                    }, containerColor = MapColors.follow, contentColor = Color.White) {
+                        if (searching) LoadingIndicator(Modifier.size(28.dp), color = Color.White)
+                        else Icon(Icons.Filled.AltRoute, "Otras rutas")
+                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.size(12.dp))
+                }
                 SmallFloatingActionButton(onClick = {
                     val loc = location
                     if (loc == null || !Gps.isFresh(loc)) Toast.makeText(context, "Todavía no hay posición del GPS", Toast.LENGTH_SHORT).show()

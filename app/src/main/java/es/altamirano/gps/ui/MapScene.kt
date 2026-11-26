@@ -32,6 +32,7 @@ import kotlin.math.hypot
  * abierto, track que se graba, puntos guardados (con la línea al destino) y la posición.
  */
 class MapScene(context: Context, density: Float) {
+    private val altDensity = density
     // Los rótulos del híbrido: una segunda capa de teselas (PNG transparente) sobre la ortofoto,
     // debajo de los tracks y la posición. Mientras carga no pinta nada (de serie, una cuadrícula gris
     // que taparía la foto).
@@ -86,6 +87,30 @@ class MapScene(context: Context, density: Float) {
     }
 
     fun setTrack(line: Polyline, pts: List<TrackPoint>) = line.setPoints(pts.map { GeoPoint(it.lat, it.lon) })
+
+    /** Las otras rutas posibles de la vista previa (la elegida va en [preview]). */
+    private val previewAlts = ArrayList<Polyline>()
+
+    /**
+     * La vista previa: la ruta elegida en azul fuerte y las demás claras debajo; tocar una de las
+     * claras llama a [onSelect] con su número.
+     */
+    fun setPreview(map: MapView, st: es.altamirano.gps.data.RoutePreviewState?, onSelect: (Int) -> Unit) {
+        previewAlts.forEach { map.overlays.remove(it) }
+        previewAlts.clear()
+        setTrack(preview, st?.current?.route?.points.orEmpty())
+        if (st == null) return
+        val at = map.overlays.indexOf(preview).coerceAtLeast(0)
+        st.options.forEachIndexed { i, o ->
+            if (i == st.selected) return@forEachIndexed
+            val line = trackLine(MapColors.followDone.toArgb(), 6f * altDensity).apply {
+                setPoints(o.route.points.map { GeoPoint(it.lat, it.lon) })
+                setOnClickListener { _, _, _ -> onSelect(i); true }
+            }
+            previewAlts += line
+            map.overlays.add(at, line)
+        }
+    }
 
     /** Los radares que se pueden enseñar, según los ajustes (clases elegidas, avisos encendidos y la fecha de hoy). */
     fun setRadars(context: Context) {

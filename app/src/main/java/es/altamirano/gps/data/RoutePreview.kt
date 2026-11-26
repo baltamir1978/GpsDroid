@@ -57,41 +57,47 @@ object RoutePreview {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
 
-    fun show(first: PlannedRoute, destName: String, destLat: Double, destLon: Double, mode: TravelMode,
+    fun show(context: Context, first: PlannedRoute, destName: String, destLat: Double, destLon: Double, mode: TravelMode,
              from: Pair<Double, Double>, heading: Float?) {
         job?.cancel()
-        _state.value = RoutePreviewState(destName, destLat, destLon, mode, from, heading, listOf(RouteOption.of(first)))
+        _state.value = RoutePreviewState(destName, destLat, destLon, mode, from, heading, listOf(RouteOption.of(first)), loading = true)
         _fitRequest.value++
-    }
-
-    /** La siguiente alternativa: la ya calculada, o se pide a BRouter; sin más distintas, vuelta a la primera. */
-    fun next(context: Context) {
-        val st = _state.value ?: return
-        if (st.loading) return
-        if (st.selected + 1 < st.options.size) { select(st.selected + 1); return }
-        if (st.exhausted || st.options.size >= MAX_OPTIONS) { select(0); return }
-        _state.value = st.copy(loading = true, message = null)
+        // Las alternativas, todas de una vez y en segundo plano (como Waze): se van añadiendo al mapa.
         job = scope.launch {
-            val r = Routing.route(context.applicationContext, st.from, st.destLat to st.destLon, st.mode, st.heading, alternative = st.options.size)
-            val cur = _state.value ?: return@launch
-            _state.value = when (r) {
-                is Routing.Result.Ok -> {
-                    val opt = RouteOption.of(r.route)
-                    // BRouter, si no encuentra otra distinta, devuelve una casi igual: no cuenta.
-                    if (cur.options.any { same(it, opt) }) cur.copy(loading = false, exhausted = true, selected = 0,
-                        message = if (cur.options.size == 1) "No hay otra ruta distinta" else "No hay más rutas distintas")
-                    else cur.copy(options = cur.options + opt, selected = cur.options.size, loading = false)
-                }
-                is Routing.Result.Failed -> cur.copy(loading = false, message = r.message)
-                is Routing.Result.MissingTiles -> cur.copy(loading = false, message = "Faltan los datos de rutas de la zona")
+            for (alt in 1 until MAX_OPTIONS) {
+                val r = Routing.route(context.applicationContext, from, destLat to destLon, mode, heading, alternative = alt)
+                val cur = _state.value ?: return@launch
+                val opt = (r as? Routing.Result.Ok)?.route?.let { RouteOption.of(it) }
+                // BRouter, cuando ya no encuentra otra distinta, devuelve una casi igual: se acaba ahí.
+                if (opt == null || cur.options.any { same(it, opt) }) break
+                _state.value = cur.copy(options = cur.options + opt)
             }
-            _fitRequest.value++
+            _state.value = _state.value?.copy(loading = false, exhausted = true,
+                message = if ((_state.value?.options?.size ?: 0) == 1) "No hay otra ruta distinta" else null)
         }
     }
 
-    private fun select(i: Int) {
-        _state.value = _state.value?.copy(selected = i, message = null)
-        _fitRequest.value++
+    /**
+     * Yendo ya por una ruta: las rutas posibles desde donde estás hasta el mismo destino (el botón de
+     * las dos flechas). La primera se calcula aquí; null si se pudo, o lo que haya que decir.
+     */
+    suspend fun fromNavigation(context: Context): String? {
+        val nav = Following.state.value?.nav ?: return "No vas por ninguna ruta"
+        val loc = Gps.location.value?.takeIf { Gps.isFresh(it) } ?: return "Sin posición del GPS"
+        val from = loc.latitude to loc.longitude
+        val heading = if (loc.hasBearing() && loc.hasSpeed() && loc.speed > 1f) loc.bearing else null
+        return when (val r = Routing.route(context, from, nav.destLat to nav.destLon, nav.mode, heading)) {
+            is Routing.Result.Ok -> { show(context, r.route, nav.destName, nav.destLat, nav.destLon, nav.mode, from, heading); null }
+            is Routing.Result.Failed -> r.message
+            is Routing.Result.MissingTiles -> "Faltan los datos de rutas de la zona"
+        }
+    }
+
+    /** Ver otra de las rutas (al tocar su botón o su línea en el mapa). */
+    fun select(i: Int) {
+        val st = _state.value ?: return
+        if (i !in st.options.indices || i == st.selected) return
+        _state.value = st.copy(selected = i, message = null)
     }
 
     /** Dos rutas son la misma si miden casi lo mismo (1 %) y pasan por casi los mismos sitios. */

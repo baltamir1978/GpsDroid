@@ -62,6 +62,7 @@ import es.altamirano.gps.data.RoutePreviewState
 import es.altamirano.gps.core.Geo
 import es.altamirano.common.ui.glass
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.ButtonDefaults
@@ -142,7 +143,7 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
                 }
                 is Routing.Result.Ok -> {
                     // Primero se ve en el mapa, con sus datos y las alternativas; desde ahí se empieza.
-                    RoutePreview.show(r.route, w.name, w.lat, w.lon, mode, here.latitude to here.longitude, here.travelHeading(1f))
+                    RoutePreview.show(context, r.route, w.name, w.lat, w.lon, mode, here.latitude to here.longitude, here.travelHeading(1f))
                     onStarted()
                 }
             }
@@ -236,26 +237,40 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
 }
 
 /**
- * Abajo en el mapa, con una ruta en vista previa: cuál es (de cuántas), lo que mide, lo que se tarda
- * según BRouter y el desnivel; «Otra ruta» pide la siguiente alternativa y «Empezar» va por ella.
+ * Abajo en el mapa, con una ruta en vista previa: hasta dónde, un botón por cada ruta posible (con
+ * su tiempo y su distancia; se calculan todas a la vez y se dibujan todas en el mapa) y, de la
+ * elegida, el desnivel. «Empezar» va por la elegida.
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun RoutePreviewCard(p: RoutePreviewState, modifier: Modifier, onNext: () -> Unit, onCancel: () -> Unit, onStart: () -> Unit) {
+fun RoutePreviewCard(p: RoutePreviewState, modifier: Modifier, onSelect: (Int) -> Unit, onCancel: () -> Unit, onStart: () -> Unit) {
     val o = p.current
     Column(modifier.glass(RoundedCornerShape(28.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(modeIcon(p.mode), null, tint = MapColors.follow)
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                 Text("Hasta «${p.destName}»", fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
-                Text(if (p.options.size > 1 || p.exhausted) "Ruta ${p.selected + 1} de ${p.options.size}" else p.mode.label,
+                Text(if (p.loading) "Buscando otras rutas…" else if (p.options.size > 1) "${p.options.size} rutas: toca una (aquí o en el mapa)" else p.mode.label,
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            if (p.loading) LoadingIndicator(Modifier.size(28.dp))
         }
-        Text(buildList {
-            add(Geo.formatDistance(o.lengthM))
-            o.route.totalS?.let { add(Geo.formatDuration(it).let { d -> if (it >= 3600) d.substringBeforeLast(':') + " h" else d.substringBefore(':') + " min" }) }
-            if (o.ascentM != null && o.descentM != null) add("↑ ${es.altamirano.gps.core.Altitude.format(o.ascentM)} ↓ ${es.altamirano.gps.core.Altitude.format(o.descentM)}")
-        }.joinToString("  ·  "), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        // Un botón por ruta, como Waze: el tiempo grande y la distancia debajo.
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            p.options.forEachIndexed { i, opt ->
+                FilterChip(selected = i == p.selected, onClick = { onSelect(i) },
+                    leadingIcon = if (i == p.selected) ({ Icon(Icons.Filled.AltRoute, null, Modifier.size(18.dp)) }) else null,
+                    label = {
+                        Column(Modifier.padding(vertical = 4.dp)) {
+                            Text(opt.route.totalS?.let { duration(it) } ?: "Ruta ${i + 1}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(Geo.formatDistance(opt.lengthM), fontSize = 12.sp)
+                        }
+                    })
+            }
+        }
+        if (o.ascentM != null && o.descentM != null)
+            Text("↑ ${es.altamirano.gps.core.Altitude.format(o.ascentM)} ↓ ${es.altamirano.gps.core.Altitude.format(o.descentM)}", fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         // Lo que la ruta no cubre: hasta el punto no hay camino conocido (falta en OpenStreetMap o es privado).
         val gap = o.route.gapToM(p.destLat, p.destLon)
         if (gap > END_GAP_M) Text("La ruta acaba a ${Geo.formatDistance(gap)} del punto: no hay camino conocido hasta él. " +
@@ -265,13 +280,12 @@ fun RoutePreviewCard(p: RoutePreviewState, modifier: Modifier, onNext: () -> Uni
         p.message?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancelar") }
-            OutlinedButton(onClick = onNext, enabled = !p.loading) {
-                if (p.loading) LoadingIndicator(Modifier.size(20.dp)) else Icon(Icons.Filled.AltRoute, null)
-                Text(if (p.loading) "  Buscando…" else "  Otra ruta")
-            }
-            Button(onClick = onStart, enabled = !p.loading, colors = ButtonDefaults.buttonColors(containerColor = MapColors.follow, contentColor = Color.White)) {
+            Button(onClick = onStart, colors = ButtonDefaults.buttonColors(containerColor = MapColors.follow, contentColor = Color.White)) {
                 Icon(Icons.Filled.Navigation, null); Text("  Empezar", fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
+
+/** «15 min», «1 h 20 min». */
+fun duration(s: Long): String = if (s >= 3600) "${s / 3600} h ${(s % 3600) / 60} min" else "${(s / 60).coerceAtLeast(1)} min"

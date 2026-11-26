@@ -36,6 +36,24 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.14.0 (26-nov-2026): elegir ruta como en Waze (todas a la vez y el botón de las dos flechas).**
+Bruno: «que pueda elegir ruta desde un botón como el de Waze: de dos flechas, para elegir entre las
+rutas disponibles, y las muestra todas a la vez en el mapa».
+- `RoutePreview.show` calcula las alternativas (`alternativeidx` 1-3) **todas de una vez** en segundo
+  plano y las va añadiendo; para al llegar a una casi igual. `select(i)` elige; ya no hay «Otra ruta».
+- Mapa (móvil y coche): `MapScene.setPreview` pinta la elegida en azul fuerte y las demás claras
+  debajo; tocar una clara la elige (`Polyline.setOnClickListener`). Tarjeta: un `FilterChip` por ruta
+  con su tiempo y distancia.
+- Botón de las dos flechas (`AltRoute`) yendo por una ruta: en el móvil, junto al de guardar punto;
+  en Android Auto, en lugar del de grabar. `RoutePreview.fromNavigation` calcula desde donde estás al
+  mismo destino; «Empezar» cambia de ruta, «Cancelar» sigue con la de antes.
+- Android Auto: elegir un punto ya no empieza en el acto: `RouteChoiceCarScreen` con la plantilla
+  `RoutePreviewNavigationTemplate` (lista con `setOnSelectedListener` y «Empezar»); el mapa encuadra la
+  elegida mientras se elige y vuelve a seguir al acabar.
+- **Probado en el emulador** (móvil): 4 rutas de Sol a Plaza de España en la tarjeta, elegir la de 17
+  min (1,5 km) y empezar; el botón de las dos flechas yendo por ella vuelve a dar las 4; «Cancelar»
+  sigue con la de antes. **Sin probar**: Android Auto (no hay DHU) y tocar las líneas del mapa.
+
 **0.13.0 (26-nov-2026): los radares, en el mapa.** Bruno: «los radares tienen que tener un icono
 visible en el mapa cuando vas a más de 20 km/h o has elegido ruta en coche».
 - `ui/RadarsOverlay` (en `MapScene`, móvil y coche; encima de los tracks y debajo de los puntos): una

@@ -145,6 +145,29 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         return style
     }
 
+    private var preview: es.altamirano.gps.data.RoutePreviewState? = null
+
+    /**
+     * Las rutas posibles en el mapa del coche. Al aparecer, se encuadra la elegida y se deja de seguir
+     * la posición mientras se elige; al acabar (empezar o volver), se sigue otra vez.
+     */
+    fun showPreview(st: es.altamirano.gps.data.RoutePreviewState?) {
+        val was = preview
+        preview = st
+        val m = map; val sc = scene
+        if (m != null && sc != null) {
+            sc.setPreview(m, st) { es.altamirano.gps.data.RoutePreview.select(it) }
+            val pts = st?.current?.route?.points
+            if (pts != null && pts.size > 1 && (was == null || was.selected != st.selected)) {
+                main.removeCallbacks(resumeFollow)
+                if (follow) { follow = false; main.removeCallbacks(resumeFollow) }
+                m.zoomToBoundingBox(org.osmdroid.util.BoundingBox.fromGeoPoints(pts.map { GeoPoint(it.lat, it.lon) }).increaseByScale(1.3f), false)
+            }
+            m.invalidate()
+        }
+        if (st == null && was != null) follow = true
+    }
+
     /** Los ajustes de radares han cambiado (desde el móvil o el coche). */
     fun radarsChanged() { scene?.setRadars(car); map?.invalidate() }
 
