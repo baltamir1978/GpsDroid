@@ -24,6 +24,14 @@
 
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
+    <!-- Rutas: BRouter es otra app; desde Android 11 hay que declararla para poder verla y conectar. -->
+    <queries>
+        <package android:name="btools.routingapp" />
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".GpsApp"
         android:allowBackup="true"

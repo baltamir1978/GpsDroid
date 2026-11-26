@@ -209,7 +209,7 @@ fun TracksScreen() {
         }
         itemsIndexed(list, key = { _, t -> t.file.name }) { i, t ->
             val recordingThis = rec.active && rec.file == t.file
-            TrackRow(Modifier.padding(horizontal = side), i, t, recordingThis, following?.file == t.file, onOpen = { details = t }, onMap = { Tracks.open(t.file) },
+            TrackRow(Modifier.padding(horizontal = side), i, t, recordingThis, following?.file?.let { it == t.file } == true, onOpen = { details = t }, onMap = { Tracks.open(t.file) },
                 onDelete = { toDelete = t }, onShare = { share(t) }, onFollow = { r -> follow(t, r) })
         }
         item {

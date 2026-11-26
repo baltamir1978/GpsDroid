@@ -165,6 +165,7 @@ fun WaypointSheet(w: Waypoint, loc: Location?, isTarget: Boolean, onDismiss: () 
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 onShowOnMap?.let { OutlinedButton(onClick = it) { Icon(Icons.Filled.Map, null); Text("  Ver en el mapa") } }
+                RouteToButton(w, loc, onStarted = onDismiss)
                 OutlinedButton(onClick = { rename = true }) { Icon(Icons.Filled.Edit, null); Text("  Renombrar") }
                 OutlinedButton(onClick = {
                     // Otra app de mapas (Organic Maps, OsmAnd…) para llegar en coche por carretera.

@@ -36,6 +36,34 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**En desarrollo (26-nov-2026, sin versión): navegación con rutas de BRouter.** Lo pidió Bruno («vete
+empezando con la navegación»). Hecho, compila y con pruebas, **sin probar contra BRouter de verdad**
+(ni en el emulador ni en el móvil):
+- `core/Route.kt`: `TravelMode` (a pie `hiking-mountain`, bici `trekking`, coche `car-vario`, con
+  sus distancias de aviso), `Maneuver` (códigos de `VoiceHint` de BRouter, frases en español),
+  `BRouterJson` (lee el GeoJSON: coordenadas `[lon, lat, ele]` y `voicehints`
+  `[índice, código, salida, distancia, ángulo]`; con `timode=2` salir por la izquierda/derecha llega
+  como 17/18) y `RouteGuide` (siguiente maniobra y qué decir: cada una como mucho en tres etapas
+  —lejos, cerca, ya—, saltando a la más cercana; dos seguidas a menos de 60 m se dicen juntas).
+- `data/Routing.kt`: se conecta al servicio exportado de BRouter
+  (`btools.routingapp.BRouterService`, `IBRouterService.aidl` copiado en `src/main/aidl`, licencia
+  MIT; `aidl = true` en Gradle; `<queries>` en el manifiesto). Pide `profile` y, si BRouter no lo
+  tiene, su modo de servicio (`v` + `fast`); respuesta comprimida (`z64` + gzip en base64) por el
+  límite del Binder. Los errores se traducen (faltan datos de la zona, BRouter sin preparar…).
+- `Following` sirve para las dos cosas: un track guardado (`file`) o una ruta (`nav: Navigation`,
+  con destino y modo). En ruta, el servicio dice cada maniobra con `TextToSpeech` (es-ES, audio de
+  guía de navegación con foco transitorio que baja la música) y, fuera de la ruta, **recalcula**
+  desde donde estés (como mucho cada 20 s; si falla, sigue con la de antes). Sin motor de voz
+  (GrapheneOS no trae ninguno) lo dice en la píldora.
+- Interfaz: «Ruta hasta aquí» en la ficha de un punto (elige a pie / bici / coche, recuerda el
+  último; sin BRouter explica cómo instalarlo: F-Droid o Play, abrirlo una vez y bajar los cuadros
+  de la zona en su «Download Manager»). En el mapa, la píldora enseña la maniobra en grande (icono de
+  Material, distancia, qué hacer y lo que queda). En Android Auto, `RoutingInfo` con `Step` y
+  `Maneuver` (tipos de la Car App Library; rotondas CCW con su salida) en vez de la tarjeta.
+- Falta: probar con BRouter (instalarlo y bajar al menos el cuadro de la zona, `W5_N40` para Madrid),
+  ruta desde una pulsación larga en el mapa (no sólo puntos guardados), `NavigationManager` del
+  coche (`navigationStarted`, para el cuadro de instrumentos) y la versión.
+
 **0.5.0 (26-nov-2026): seguir un track y altitud de los puntos.** Lo pidió Bruno: navegación
 «nivel 1» (guiarse por un GPX, sin calcular rutas) y, en la lista de puntos de Tracks, la altitud.
 - **Seguir un track** (`core/TrackFollow.kt`: `FollowRoute`, `TrackFollower`; `data/Following.kt`:
@@ -273,7 +301,7 @@ capas), escala y atribución; descarga de zonas. Lo demás (grabar, importar, sa
 
 Ideas, si hicieran falta: pintar en el mapa el punto marcado en el perfil; en el coche, mapa orientado hacia donde vas.
 
-**Por desarrollar (Bruno, 26-nov-2026): navegación con rutas calculadas.** Con **BRouter** (app
+**Navegación con rutas calculadas (en desarrollo, ver arriba).** La idea de partida: Con **BRouter** (app
 aparte, libre, rutas sin conexión con datos de OpenStreetMap por zonas; se le piden por su servicio
 AIDL, como hacen OsmAnd y Locus): a pie, bici o coche, indicaciones giro a giro leídas en español
 (`TextToSpeech`) y, en Android Auto, `NavigationTemplate` con la maniobra. Los servicios en línea

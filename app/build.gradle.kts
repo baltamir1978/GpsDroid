@@ -44,6 +44,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true   // IBRouterService: pedir rutas a BRouter
     }
 }
 

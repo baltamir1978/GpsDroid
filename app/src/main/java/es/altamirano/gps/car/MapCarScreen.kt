@@ -19,6 +19,11 @@ import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.MessageInfo
+import androidx.car.app.navigation.model.RoutingInfo
+import androidx.car.app.navigation.model.Step
+import androidx.car.app.navigation.model.Maneuver
+import es.altamirano.gps.core.Maneuver.Kind as MKind
+import androidx.car.app.model.Distance
 import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.IconCompat
@@ -56,7 +61,11 @@ class MapCarScreen(car: CarContext) : Screen(car) {
     private var recording = Recording.state.value.active
     private var lastInvalidate = 0L
 
-    private data class Card(val title: String, val text: String, val arrowDeg: Int?)
+    private data class Card(val title: String, val text: String, val arrowDeg: Int?, val step: StepCard? = null)
+
+    /** La maniobra de una ruta, con la distancia ya redondeada (para no rehacer la plantilla a cada metro). */
+    private data class StepCard(val kind: MKind, val exit: Int, val angle: Int, val distanceM: Int,
+                                val cue: String, val then: String?)
 
     init {
         lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -98,7 +107,16 @@ class MapCarScreen(car: CarContext) : Screen(car) {
         val fresh = loc?.takeIf { Gps.isFresh(it) }
         val recText = if (rec.active) "Grabando · ${Geo.formatDistance(rec.lengthM)}" else null
         // Un destino manda sobre el track (se ha elegido después, desde el coche o el móvil).
-        if (t == null && fol != null) return followCard(fol, fresh, recText)
+        if (t == null && fol != null) {
+            val next = fol.nav?.next
+            val f = fol.fix
+            if (next != null && fresh != null && f?.status == FollowStatus.ON_TRACK && fol.nav.rerouting.not()) {
+                val d = next.distanceM.let { if (it < 1000) (it / 10).roundToInt() * 10 else (it / 100).roundToInt() * 100 }
+                return Card(next.maneuver.title(), Following.remainingText(f.copy(remainingM = (f.remainingM / 100).roundToInt() * 100.0)),
+                    null, StepCard(next.maneuver.kind, next.maneuver.exit, next.maneuver.angle, d, next.maneuver.title(), next.then?.title()))
+            }
+            return followCard(fol, fresh, recText)
+        }
         if (t == null) return recText?.let { Card(it, if (fresh == null) "Sin señal GPS" else "Sin destino", null) }
         if (fresh == null) return Card(t.name, listOfNotNull("Sin señal GPS", recText).joinToString(" · "), null)
         val d = Geo.distanceM(fresh.latitude, fresh.longitude, t.lat, t.lon)
@@ -153,12 +171,47 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             .setMapActionStrip(mapStrip)
             .setPanModeListener { panning -> if (panning) renderer.follow = false }
             .setBackgroundColor(CarColor.createCustom(MapColors.target.toArgb(), MapColors.target.toArgb()))
+        card?.step?.let { s ->
+            // Yendo por una ruta: la maniobra como la enseñan los navegadores (y el cuadro del coche).
+            val info = RoutingInfo.Builder().setCurrentStep(step(s.kind, s.exit, s.angle, s.cue, s.then == null),
+                if (s.distanceM >= 1000) Distance.create(s.distanceM / 1000.0, Distance.UNIT_KILOMETERS) else Distance.create(s.distanceM.toDouble(), Distance.UNIT_METERS))
+            b.setNavigationInfo(info.build())
+            return b.build()
+        }
         card?.let { c ->
             val info = MessageInfo.Builder(c.title).setText(c.text)
             c.arrowDeg?.let { info.setImage(CarIcon.Builder(IconCompat.createWithBitmap(arrow(it))).build()) }
             b.setNavigationInfo(info.build())
         }
         return b.build()
+    }
+
+    private fun step(kind: MKind, exit: Int, angle: Int, cue: String, @Suppress("UNUSED_PARAMETER") last: Boolean): Step {
+        val type = when (kind) {
+            MKind.LEFT -> Maneuver.TYPE_TURN_NORMAL_LEFT
+            MKind.RIGHT -> Maneuver.TYPE_TURN_NORMAL_RIGHT
+            MKind.SLIGHT_LEFT -> Maneuver.TYPE_TURN_SLIGHT_LEFT
+            MKind.SLIGHT_RIGHT -> Maneuver.TYPE_TURN_SLIGHT_RIGHT
+            MKind.SHARP_LEFT -> Maneuver.TYPE_TURN_SHARP_LEFT
+            MKind.SHARP_RIGHT -> Maneuver.TYPE_TURN_SHARP_RIGHT
+            MKind.KEEP_LEFT -> Maneuver.TYPE_KEEP_LEFT
+            MKind.KEEP_RIGHT -> Maneuver.TYPE_KEEP_RIGHT
+            MKind.EXIT_LEFT -> Maneuver.TYPE_OFF_RAMP_NORMAL_LEFT
+            MKind.EXIT_RIGHT -> Maneuver.TYPE_OFF_RAMP_NORMAL_RIGHT
+            MKind.UTURN_LEFT, MKind.UTURN -> Maneuver.TYPE_U_TURN_LEFT
+            MKind.UTURN_RIGHT -> Maneuver.TYPE_U_TURN_RIGHT
+            // En España las rotondas se recorren en sentido contrario a las agujas del reloj.
+            MKind.ROUNDABOUT -> Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW
+            MKind.ROUNDABOUT_LEFT -> Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW
+            MKind.END -> Maneuver.TYPE_DESTINATION
+            else -> Maneuver.TYPE_STRAIGHT
+        }
+        val m = Maneuver.Builder(type)
+            // La flecha girada lo que gira la calle (BRouter: negativo a la izquierda).
+            .setIcon(CarIcon.Builder(IconCompat.createWithBitmap(arrow(((angle % 360) + 360) % 360))).build())
+        if (type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW)
+            m.setRoundaboutExitNumber(kotlin.math.abs(exit).coerceAtLeast(1))
+        return Step.Builder(cue).setManeuver(m.build()).build()
     }
 
     private fun icon(res: Int, tint: CarColor = CarColor.DEFAULT, onClick: () -> Unit) = Action.Builder()

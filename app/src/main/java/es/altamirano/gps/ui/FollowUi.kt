@@ -34,6 +34,7 @@ import es.altamirano.gps.core.Direction
 import es.altamirano.gps.core.Geo
 import es.altamirano.gps.core.FollowStatus
 import es.altamirano.gps.data.FollowState
+import es.altamirano.gps.core.NextManeuver
 import es.altamirano.gps.data.Following
 import es.altamirano.gps.data.Gps
 
@@ -53,6 +54,8 @@ fun FollowPill(st: FollowState, onShow: () -> Unit, onClose: () -> Unit) {
         FollowStatus.ARRIVED -> MapColors.waypoint
         else -> MapColors.follow
     }
+    val next = st.nav?.next?.takeIf { fix?.status == FollowStatus.ON_TRACK && st.nav.rerouting.not() }
+    if (next != null) { ManeuverPill(st, next, tint, onShow, onClose); return }
     Row(Modifier.glass(RoundedCornerShape(24.dp), tint = tint, alpha = 0.9f).clickable(onClick = onShow)
         .padding(start = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(36.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
@@ -64,7 +67,7 @@ fun FollowPill(st: FollowState, onShow: () -> Unit, onClose: () -> Unit) {
         }
         Column(Modifier.weight(1f, fill = false).padding(start = 10.dp)) {
             Text(when (fix?.status) {
-                FollowStatus.OFF_TRACK -> "Fuera del track"
+                FollowStatus.OFF_TRACK -> if (st.nav?.rerouting == true) "Recalculando la ruta…" else if (st.nav != null) "Fuera de la ruta" else "Fuera del track"
                 FollowStatus.APPROACHING -> "Hacia «${st.name}»"
                 else -> st.name
             }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -75,5 +78,27 @@ fun FollowPill(st: FollowState, onShow: () -> Unit, onClose: () -> Unit) {
             Text(detail, fontSize = 12.sp, color = Color.White.copy(alpha = 0.92f))
         }
         IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "Dejar de seguir", Modifier.size(18.dp), tint = Color.White) }
+    }
+}
+
+/**
+ * Yendo por una ruta: la siguiente maniobra en grande (dibujo, distancia y qué hacer) y, debajo, lo
+ * que queda. Si después viene otra muy cerca, se avisa también («luego, a la derecha»).
+ */
+@Composable
+private fun ManeuverPill(st: FollowState, next: NextManeuver, tint: Color, onShow: () -> Unit, onClose: () -> Unit) {
+    Row(Modifier.glass(RoundedCornerShape(24.dp), tint = tint, alpha = 0.92f).clickable(onClick = onShow)
+        .padding(start = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.White), contentAlignment = Alignment.Center) {
+            Icon(maneuverIcon(next.maneuver), null, Modifier.size(38.dp), tint = tint)
+        }
+        Column(Modifier.weight(1f, fill = false).padding(start = 12.dp)) {
+            Text(Geo.formatDistance(next.distanceM), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(next.maneuver.title() + (next.then?.let { " · luego ${it.phrase()}" } ?: ""), fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            st.fix?.let { Text(Following.remainingText(it), fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f)) }
+            if (st.noVoice) Text("Sin voz: instala un motor de voz (RHVoice, eSpeak NG)", fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
+        }
+        IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "Parar la ruta", Modifier.size(18.dp), tint = Color.White) }
     }
 }
