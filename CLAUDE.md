@@ -36,6 +36,8 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**Sin versión todavía (26-nov-2026): la versión, al final de Offline.** Bruno: «¿dónde veo la versión en la app?». Debajo de la atribución del IGN, «IGN GPS 0.8.1» (`BuildConfig.VERSION_NAME`).
+
 **0.8.1 (26-nov-2026): en coche, por pistas de tierra si hace falta; y el último tramo sin camino.**
 Bruno: entre Vadillo de la Sierra y Cabezas del Villar (Ávila) la ruta le dejaba a más de 4 km de un
 punto. Comprobado con el servidor de BRouter: los caminos de tierra están en OpenStreetMap, pero

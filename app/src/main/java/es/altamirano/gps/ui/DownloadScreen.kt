@@ -227,6 +227,8 @@ fun DownloadScreen() {
             }
         }
         Text("Mapas: ${MapLayer.ATTRIBUTION} (CC BY 4.0).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Para saber qué versión hay en el móvil sin ir a los ajustes de Android.
+        Text("IGN GPS ${es.altamirano.gps.BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 
