@@ -54,6 +54,10 @@ import androidx.compose.material.icons.filled.Route
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Archive
+import es.altamirano.gps.data.Backup
+import android.content.ActivityNotFoundException
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -121,6 +125,11 @@ fun TracksScreen() {
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) Tracks.import(context, uri)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
+    // Copia de todo en un ZIP donde elija el usuario: los tracks viven dentro de la app y se
+    // perderían al desinstalarla.
+    val backup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) Toast.makeText(context, Backup.export(context, uri), Toast.LENGTH_LONG).show()
+    }
 
     val side = gutter()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalBottomBar.current + 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -147,13 +156,19 @@ fun TracksScreen() {
                         Text("Graba por dónde vas", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         Text("Un punto cada 5 m (o cada 30 s si vas despacio); las posiciones con más de 30 m de error no entran.",
                             fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Button(onClick = {
                                 if (Build.VERSION.SDK_INT >= 33) notifications.launch(Manifest.permission.POST_NOTIFICATIONS) else Recording.start(context)
                             }, colors = ButtonDefaults.buttonColors(containerColor = MapColors.recording, contentColor = Color.White)) {
                                 Icon(Icons.Filled.FiberManualRecord, null); Text("  Grabar", fontWeight = FontWeight.SemiBold)
                             }
                             OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }) { Icon(Icons.Filled.FileOpen, null); Text("  Importar GPX") }
+                            if (list.isNotEmpty() || points.isNotEmpty())
+                                OutlinedButton(onClick = {
+                                    // Sin selector de archivos (DocumentsUI) en el sistema, launch lanza ActivityNotFoundException.
+                                    try { backup.launch(Backup.suggestedName()) }
+                                    catch (_: ActivityNotFoundException) { Toast.makeText(context, "Este móvil no tiene selector de archivos", Toast.LENGTH_LONG).show() }
+                                }) { Icon(Icons.Filled.Archive, null); Text("  Copia de todo") }
                         }
                     }
                 }

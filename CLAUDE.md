@@ -36,6 +36,16 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.4.8 (26-nov-2026): copia de todo.** Bruno no quiere perder los tracks del móvil, que viven en
+`filesDir` (se borran si se desinstala la app). En Tracks, junto a Grabar e Importar (en un
+`FlowRow`: no caben los tres en una fila), «Copia de todo» guarda un ZIP donde elija el usuario
+(`CreateDocument`, nombre `IGN-GPS-copia-<fecha>.zip`) con los GPX en `tracks/` y
+`puntos/puntos.gpx` (`data/Backup`; los `.tmp` a medio escribir quedan fuera). Sólo sale si hay
+algo que copiar y no se está grabando. El ZIP se escribe en `Backup.writeZip`, sin Android, con su
+prueba (`BackupTest`; 17 pruebas). Si el sistema no tiene selector de archivos (`DocumentsUI`; la
+imagen ATD del emulador no lo trae) avisa en vez de cerrarse: así se cazó. En el emulador sólo se
+ha podido comprobar eso; **guardar el ZIP de verdad, sin probar en el móvil.**
+
 **0.4.7 (26-nov-2026): sin la comprobación de instalador de Play.** Mismo código que la 0.4.6.
 Play activa por defecto la «protección automática» (mete en lo que reparte una comprobación del
 instalador); Bruno pidió quitarla en todas («desactívalo»): depende de los servicios de Play y en

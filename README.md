@@ -24,6 +24,8 @@ ubicación por red ni servicios de Google.
   importar GPX de otras apps, compartirlos y borrarlos. Al tocar uno se abre su **ficha**:
   distancia, tiempo total y en movimiento, velocidad media y ritmo, subida y bajada, altitud
   máxima y mínima y el **perfil de altitud** (se recorre con el dedo). Desde ella, «Ver en el mapa».
+  **Copia de todo**: guarda todos los tracks y los puntos en un ZIP donde elijas (los datos viven
+  dentro de la app y se perderían al desinstalarla).
 - **Puntos**: mantén pulsado el mapa (o toca el botón verde para tu posición) y guárdalo con un
   nombre. Al tocar uno: **ir hacia él** (arriba en el mapa sale una flecha que apunta hacia el
   punto con la brújula, la distancia y hacia dónde queda: «1,2 km al NE · a tu derecha», y una
