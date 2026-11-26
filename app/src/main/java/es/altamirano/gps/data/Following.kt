@@ -8,15 +8,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
-import android.media.AudioManager
 import android.os.IBinder
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import es.altamirano.gps.R
 import es.altamirano.gps.core.Altitude
 import es.altamirano.gps.core.Direction
@@ -46,7 +41,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /** Ir a un sitio por una ruta calculada (BRouter): adónde, cómo y la siguiente maniobra. */
 data class Navigation(
@@ -63,16 +57,15 @@ data class Navigation(
 data class FollowState(
     val name: String, val file: File?, val reversed: Boolean, val route: FollowRoute,
     val fix: FollowFix? = null, val nav: Navigation? = null,
-    /** Sin motor de voz en el móvil: las indicaciones sólo se ven (y vibran). */
-    val noVoice: Boolean = false,
     /** En coche: el radar que viene (a menos de 500 m) o el tramo de radar en el que estás. */
     val radar: es.altamirano.gps.core.RadarAlert? = null,
 )
 
 /**
  * Seguir un track o una ruta: guía diciendo cuánto queda, el desnivel que falta y la hora de llegada,
- * y avisa (vibra y suena) si te sales, al volver y al llegar. Con una ruta de BRouter, además, dice
- * en voz alta cada giro y, si te sales, calcula otra desde donde estés. Corre en un servicio en
+ * y avisa (vibra y suena) si te sales, al volver y al llegar. Con una ruta de BRouter, además, enseña
+ * cada giro (sin voz: Bruno no la quiere) y, si te sales, calcula otra desde donde estés; en coche,
+ * los radares con un pitido suave. Corre en un servicio en
  * primer plano, como la grabación, para que funcione con el móvil en el bolsillo; es independiente
  * de grabar (se pueden hacer las dos cosas a la vez).
  */
@@ -152,7 +145,6 @@ class FollowService : Service() {
         private const val ALERTS = "following-alerts"
         private const val NOTIFICATION_ID = 2
         private const val ALERT_ID = 3
-        private const val RADAR_ID = 4
         private const val OWNER = "following"
         /** Entre dos recálculos, como poco (BRouter tarda y gasta batería). */
         private const val REROUTE_EVERY_MS = 20_000L
@@ -162,9 +154,6 @@ class FollowService : Service() {
 
     private var scope: CoroutineScope? = null
     private var lastText = ""
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
-    private var focus: AudioFocusRequest? = null
     private var lastReroute = 0L
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -197,7 +186,6 @@ class FollowService : Service() {
         scope?.cancel()
         nm.cancel(ALERT_ID)
         Gps.acquire(OWNER)
-        if (st.nav != null) startVoice()
         // Con red ahora, los mapas de todo el camino (±500 m): más adelante puede no haber cobertura.
         Tiles.saveAlong(this, st.route.points)
         var follower = TrackFollower(st.route)
@@ -229,9 +217,7 @@ class FollowService : Service() {
                     loc.elapsedRealtimeNanos / 1e9)
                 val fix = follower.last ?: return@collect
                 val nav = cur.nav
-                var say: String? = null
                 if (nav != null) {
-                    if (fix.status == FollowStatus.ON_TRACK) say = nav.guide.announce(fix.match.alongM)
                     cur = cur.copy(nav = nav.copy(next = if (fix.status == FollowStatus.ARRIVED) null else nav.guide.next(fix.match.alongM)))
                     // Sin haber llegado aún a la ruta (en coche suele empezar en la calle de al lado):
                     // si te vas alejando de ella, es que vas por otro sitio.
@@ -254,10 +240,9 @@ class FollowService : Service() {
                     radarSay = sayR
                     cur = cur.copy(radar = showR)
                 }
-                Following.set(cur.copy(fix = fix, noVoice = nav != null && !ttsReady && tts == null))
+                Following.set(cur.copy(fix = fix))
                 radarSay?.let { radarAlert(it) }
                 event?.let { alert(it, Following.state.value ?: cur) }
-                say?.let { speak(it) }
                 val text = Following.state.value?.let { Following.summary(it) } ?: return@collect
                 if (text != lastText) { lastText = text; nm.notify(NOTIFICATION_ID, notification(cur.name, text)) }
             }
@@ -267,7 +252,6 @@ class FollowService : Service() {
     private fun reroute(from: Pair<Double, Double>, heading: Float?) {
         val nav = Following.state.value?.nav ?: return
         lastReroute = SystemClock.elapsedRealtime()
-        speak("Recalculando")
         scope?.launch {
             val r = Routing.route(this@FollowService, from, nav.destLat to nav.destLon, nav.mode, heading)
             val cur = Following.state.value ?: return@launch
@@ -277,64 +261,11 @@ class FollowService : Service() {
                     val guide = RouteGuide(r.route, nav.mode.announceM)
                     Following.set(cur.copy(route = guide.follow, fix = null, nav = curNav.copy(guide = guide, next = null, rerouting = false)))
                     Tiles.saveAlong(this@FollowService, r.route.points)
-                    speak("Ruta nueva")
                 }
                 // Sin ruta nueva se sigue con la de antes (y la flecha hacia ella); se reintenta más tarde.
                 is Routing.Result.Failed, is Routing.Result.MissingTiles -> Following.set(cur.copy(nav = curNav.copy(rerouting = false)))
             }
         }
-    }
-
-    // --- Voz -----------------------------------------------------------------------------------
-
-    /**
-     * El motor de voz del sistema, en español. En GrapheneOS no viene ninguno de serie (hay que
-     * instalar uno, p. ej. RHVoice o eSpeak NG): sin él las indicaciones se ven y vibran, nada más.
-     */
-    private fun startVoice() {
-        if (tts != null) return
-        // Sin ningún motor instalado, Android avisa del error dentro del propio constructor (antes de
-        // que `tts` tenga valor): por eso lo de no tener voz se hace después, en el hilo principal.
-        val noVoice = {
-            main.post {
-                ttsReady = false
-                tts?.shutdown(); tts = null
-                Following.state.value?.let { Following.set(it.copy(noVoice = it.nav != null)) }
-            }
-        }
-        tts = TextToSpeech(this) { status ->
-            if (status != TextToSpeech.SUCCESS) { noVoice(); return@TextToSpeech }
-            val t = tts ?: return@TextToSpeech
-            ttsReady = t.setLanguage(Locale.forLanguageTag("es-ES")).let { it != TextToSpeech.LANG_MISSING_DATA && it != TextToSpeech.LANG_NOT_SUPPORTED }
-            if (!ttsReady) { noVoice(); return@TextToSpeech }
-            t.setAudioAttributes(navAudio)
-            t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(id: String?) {}
-                override fun onDone(id: String?) { releaseFocus() }
-                @Deprecated("Deprecated in Java") override fun onError(id: String?) { releaseFocus() }
-            })
-        }
-    }
-
-    private val navAudio = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-        .build()
-
-    /** Dice [text] bajando un momento lo que suene (música, radio) y lo devuelve al acabar. */
-    private fun speak(text: String) {
-        val t = tts ?: return
-        if (!ttsReady) return
-        val am = getSystemService(AudioManager::class.java)
-        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(navAudio).build()
-        focus = req
-        am.requestAudioFocus(req)
-        t.speak(text, TextToSpeech.QUEUE_FLUSH, null, "nav")
-    }
-
-    private fun releaseFocus() {
-        focus?.let { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) }
-        focus = null
     }
 
     // --- Avisos y notificaciones -----------------------------------------------------------------
@@ -344,8 +275,8 @@ class FollowService : Service() {
         val ofWhat = if (st.nav != null) "de la ruta" else "del track"
         when (e) {
             FollowEvent.LEFT_TRACK -> {
-                // Con ruta, lo dice la voz y se recalcula: sin sonido de notificación encima.
-                if (st.nav != null && ttsReady) return
+                // Con ruta se recalcula sola: sin sonido de notificación.
+                if (st.nav != null) return
                 nm.notify(ALERT_ID, alertNotification("Te has salido $ofWhat", Following.summary(st)))
             }
             FollowEvent.ARRIVED -> {
@@ -356,12 +287,11 @@ class FollowService : Service() {
                     val last = st.route.points.last()
                     val text = "Fin del camino: «${st.nav.destName}» queda a ${Geo.formatDistance(gap)} al " +
                         Direction.cardinalName(Direction.bearingDeg(last.lat, last.lon, st.nav.destLat, st.nav.destLon))
-                    if (ttsReady) speak(text) else nm.notify(ALERT_ID, alertNotification("Fin del camino", text))
+                    nm.notify(ALERT_ID, alertNotification("Fin del camino", text))
                     return
                 }
                 val text = if (st.nav != null) "Has llegado a «${st.nav.destName}»" else "Final de «${st.name}»"
-                if (st.nav != null && ttsReady) speak(text)
-                else nm.notify(ALERT_ID, alertNotification("Has llegado", text))
+                nm.notify(ALERT_ID, alertNotification("Has llegado", text))
             }
             FollowEvent.BACK_ON_TRACK -> {
                 // Volver no necesita sonar: se quita el aviso y un toque corto basta.
@@ -371,30 +301,15 @@ class FollowService : Service() {
         }
     }
 
-    /** Un radar a la vista: por voz si hay motor y, siempre, una notificación que suena y vibra. */
-    private fun radarAlert(a: es.altamirano.gps.core.RadarAlert) {
-        // «Sólo en pantalla»: la franja roja basta, sin sonar.
-        if (Radars.settings(this).mode == RadarAlertMode.SILENT) return
-        if (ttsReady) speak(a.spoken())
-        val n = Notification.Builder(this, ALERTS)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(a.kind.label)
-            .setContentText(a.line())
-            .setCategory(Notification.CATEGORY_NAVIGATION)
-            .setAutoCancel(true)
-            .setTimeoutAfter(60_000)
-            .setContentIntent(openApp())
-            .build()
-        getSystemService(NotificationManager::class.java).notify(RADAR_ID, n)
+    /** Un radar a la vista: un pitido suave (con «Sólo en pantalla», ni eso: basta la franja roja). */
+    private fun radarAlert(@Suppress("UNUSED_PARAMETER") a: es.altamirano.gps.core.RadarAlert) {
+        if (Radars.settings(this).mode == RadarAlertMode.SOUND) Beeper.beep(this)
     }
 
     private fun finish() {
         scope?.cancel(); scope = null
         Gps.release(OWNER)
         getSystemService(NotificationManager::class.java).cancel(ALERT_ID)
-        getSystemService(NotificationManager::class.java).cancel(RADAR_ID)
-        tts?.shutdown(); tts = null; ttsReady = false
-        releaseFocus()
         Following.set(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

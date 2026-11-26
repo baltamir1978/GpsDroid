@@ -19,8 +19,8 @@ import java.net.URL
 
 /** Cómo avisar de un radar. */
 enum class RadarAlertMode(val label: String) {
-    /** Notificación que suena y vibra (y voz, si el móvil tiene motor). */
-    SOUND("Con sonido"),
+    /** Un pitido suave («bip-bip»), por el coche si va con Android Auto. */
+    SOUND("Con pitido"),
     /** Sólo la franja roja en el mapa y en el coche. */
     SILENT("Sólo en pantalla"),
 }

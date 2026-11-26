@@ -24,12 +24,6 @@
 
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
-    <!-- La voz de las indicaciones: desde Android 11 hay que declarar que se buscan motores de voz. -->
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE" />
-        </intent>
-    </queries>
 
     <application
         android:name=".GpsApp"

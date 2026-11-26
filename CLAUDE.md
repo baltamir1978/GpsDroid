@@ -36,6 +36,18 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.15.0 (26-nov-2026): sin voz; los radares, con un pitido suave.** Bruno: «has quitado las
+instrucciones guiadas por audio, ¿verdad? Los radares sí, que tengan un pitido razonablemente sutil».
+La voz no se había quitado (sólo el aviso «Sin voz» de la 0.8.2): si el móvil tenía motor, hablaba.
+- Fuera `TextToSpeech` entero de `FollowService` (maniobras, «Recalculando», «Ruta nueva», llegada),
+  `FollowState.noVoice` y el `<queries>` de `TTS_SERVICE`. `RouteGuide.announce` y
+  `RadarAlert.spoken` quedan en `core` (con sus pruebas) aunque la app ya no los dice.
+- `data/Beeper`: «bip-bip» (880 Hz 110 ms + 1175 Hz 130 ms, 15 ms de entrada y salida, volumen 0,35)
+  sintetizado con `AudioTrack` como `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE` y foco transitorio que baja
+  la música (con Android Auto sale por el coche). El modo de aviso de radares «Con pitido» lo usa en vez
+  de la notificación que sonaba y vibraba; «Sólo en pantalla», nada.
+- **Sin oír**: el emulador va sin audio.
+
 **0.14.0 (26-nov-2026): elegir ruta como en Waze (todas a la vez y el botón de las dos flechas).**
 Bruno: «que pueda elegir ruta desde un botón como el de Waze: de dos flechas, para elegir entre las
 rutas disponibles, y las muestra todas a la vez en el mapa».
