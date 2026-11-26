@@ -34,4 +34,9 @@ class Prefs(context: Context) {
     var keepScreenOn: Boolean
         get() = p.getBoolean("keep_screen_on", false)
         set(v) = p.edit().putBoolean("keep_screen_on", v).apply()
+
+    /** En el coche, el mapa con la dirección de la marcha hacia arriba (si no, el norte). */
+    var carHeadingUp: Boolean
+        get() = p.getBoolean("car_heading_up", true)
+        set(v) = p.edit().putBoolean("car_heading_up", v).apply()
 }

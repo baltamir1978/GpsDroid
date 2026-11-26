@@ -192,7 +192,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             .addAction(icon(R.drawable.car_layers) {
                 CarToast.makeText(carContext, renderer.nextStyle().label, CarToast.LENGTH_SHORT).show()
             })
-            .addAction(icon(R.drawable.car_place) { screenManager.push(PointsCarScreen(carContext) { w -> routeTo(w) }) })
+            .addAction(icon(R.drawable.car_place) { screenManager.push(PointsCarScreen(carContext, { renderer.setHeadingUp(it) }) { w -> routeTo(w) }) })
             // Con una ruta o un track en marcha, este botón es el de pararlo (guardar un punto conduciendo es lo de menos).
             .addAction(if (following) icon(R.drawable.car_close, CarColor.RED) { Following.stop(carContext) }
                 else icon(R.drawable.car_add_place) { savePoint() })
@@ -342,7 +342,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
 }
 
 /** Los puntos, los más cerca primero (el coche limita cuántas filas se ven); tocar uno lo hace destino. */
-class PointsCarScreen(car: CarContext, private val onPick: (es.altamirano.gps.core.Waypoint) -> Unit) : Screen(car) {
+class PointsCarScreen(car: CarContext, private val onHeadingUp: (Boolean) -> Unit, private val onPick: (es.altamirano.gps.core.Waypoint) -> Unit) : Screen(car) {
     @Suppress("DEPRECATION") // setTitle/setHeaderAction: Header pide un Android Auto más nuevo.
     override fun onGetTemplate(): Template {
         val limit = runCatching {
@@ -380,7 +380,7 @@ class PointsCarScreen(car: CarContext, private val onPick: (es.altamirano.gps.co
         // Los ajustes de radares, aquí: en el mapa no caben más botones (la plantilla deja cuatro y cuatro).
         val strip = androidx.car.app.model.ActionStrip.Builder().addAction(Action.Builder()
             .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.car_settings)).build())
-            .setOnClickListener { screenManager.push(RadarSettingsCarScreen(carContext)) }.build()).build()
+            .setOnClickListener { screenManager.push(RadarSettingsCarScreen(carContext, onHeadingUp)) }.build()).build()
         return ListTemplate.Builder().setTitle("Puntos").setHeaderAction(Action.BACK).setActionStrip(strip).setSingleList(list.build()).build()
     }
 }

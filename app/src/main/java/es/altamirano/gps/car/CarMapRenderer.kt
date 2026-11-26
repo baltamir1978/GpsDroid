@@ -203,6 +203,21 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         // En el acto y sin animar: con una posición por segundo, la animación iba siempre por detrás
         // y el coche no quedaba en el centro yendo deprisa.
         m.controller.setCenter(GeoPoint(loc.latitude, loc.longitude))
+        // La dirección de la marcha hacia arriba: sólo en marcha (parado, el rumbo del GPS baila) y
+        // girando a medias hacia el nuevo, para que no dé tirones.
+        if (prefs.carHeadingUp && loc.hasBearing() && loc.hasSpeed() && loc.speed >= HEADING_UP_MIN_SPEED) {
+            val target = -loc.bearing
+            val cur = m.mapOrientation
+            val diff = ((target - cur + 540f) % 360f) - 180f
+            m.mapOrientation = (cur + diff * 0.6f + 360f) % 360f
+        }
+    }
+
+    /** Cambiar entre dirección arriba y norte arriba (desde los ajustes del coche). */
+    fun setHeadingUp(on: Boolean) {
+        prefs.carHeadingUp = on
+        if (!on) map?.mapOrientation = 0f
+        recenter(); map?.invalidate()
     }
 
     fun release() {
@@ -214,5 +229,9 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         map = null; scene = null; presentation = null; display = null
     }
 
-    private companion object { const val RESUME_FOLLOW_MS = 15_000L }
+    private companion object {
+        const val RESUME_FOLLOW_MS = 15_000L
+        /** 2 m/s, unos 7 km/h. */
+        const val HEADING_UP_MIN_SPEED = 2f
+    }
 }

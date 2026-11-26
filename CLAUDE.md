@@ -36,6 +36,18 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.16.0 (26-nov-2026): en Android Auto, la dirección de la marcha hacia arriba.** Bruno: «que en
+Android Auto la dirección en la que se mueve el coche sea hacia arriba en el mapa».
+- `CarMapRenderer.recenter`: siguiendo la posición y a 2 m/s o más (parado, el rumbo del GPS baila),
+  `mapOrientation = -bearing`, girando cada vez el 60 % de lo que falta (sin tirones). Interruptor
+  «Mapa: dirección arriba / norte arriba» (`Prefs.carHeadingUp`, de serie arriba) en la pantalla de
+  ajustes del coche (`RadarSettingsCarScreen`, ahora «Ajustes»).
+- osmdroid pinta las capas con el lienzo **ya girado** (`MapView.dispatchDraw` → `Projection.save(c,
+  true, false)`): la flecha de la posición pasa a `rotate(bearing)` (antes restaba la orientación,
+  que siempre era 0); chinchetas, nombres y señales de radar se contragiran sobre su punto para ir
+  derechos; la velocidad se pinta sin giro (`projection.save(c, false, false)`, como la escala).
+- **Sin probar** (no hay DHU). En el móvil el mapa no gira: nada cambia allí.
+
 **0.15.0 (26-nov-2026): sin voz; los radares, con un pitido suave.** Bruno: «has quitado las
 instrucciones guiadas por audio, ¿verdad? Los radares sí, que tengan un pitido razonablemente sutil».
 La voz no se había quitado (sólo el aviso «Sin voz» de la 0.8.2): si el móvil tenía motor, hablaba.

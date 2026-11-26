@@ -197,7 +197,8 @@ class PositionOverlay(private val density: Float) : Overlay() {
             arrow.reset()
             val s = 9 * density
             arrow.moveTo(0f, -s * 2.1f); arrow.lineTo(s * 0.9f, -s * 0.6f); arrow.lineTo(-s * 0.9f, -s * 0.6f); arrow.close()
-            c.save(); c.translate(pt.x.toFloat(), pt.y.toFloat()); c.rotate(loc.bearing - mapView.mapOrientation)
+            // osmdroid pinta las capas con el lienzo ya girado con el mapa: basta el rumbo tal cual.
+            c.save(); c.translate(pt.x.toFloat(), pt.y.toFloat()); c.rotate(loc.bearing)
             fill.color = color; c.drawPath(arrow, fill); c.restore()
         }
         fill.color = color
@@ -254,6 +255,8 @@ class WaypointsOverlay(private val density: Float) : Overlay() {
             val x = pt.x.toFloat(); val y = pt.y.toFloat()
             val isTarget = w.id == t?.id
             val r = (if (isTarget) 10f else 8f) * density
+            // Con el mapa girado (el coche, con la dirección arriba), la chincheta y el nombre, derechos.
+            c.save(); c.rotate(-mapView.mapOrientation, x, y)
             // La punta de la chincheta en el sitio exacto.
             path.reset()
             path.moveTo(x, y)
@@ -269,6 +272,7 @@ class WaypointsOverlay(private val density: Float) : Overlay() {
             text.color = pin.color
             c.drawText(w.name, x, y + 14f * density, textHalo)
             c.drawText(w.name, x, y + 14f * density, text)
+            c.restore()
         }
     }
 

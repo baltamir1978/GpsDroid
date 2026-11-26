@@ -67,6 +67,8 @@ class RadarsOverlay(private val density: Float) : Overlay() {
             // Los tramos de radar móvil son sólo la línea (son muchos y casi nunca hay radar).
             if (rd.kind == RadarKind.MOBILE_STRETCH || !inBox) continue
             val x = pt.x.toFloat(); val y = pt.y.toFloat()
+            // Derecha aunque el mapa esté girado (el coche, con la dirección arriba).
+            c.save(); c.rotate(-mapView.mapOrientation, x, y)
             ring.color = color
             ring.strokeWidth = 3.5f * density
             c.drawCircle(x, y, r, fill)
@@ -81,6 +83,7 @@ class RadarsOverlay(private val density: Float) : Overlay() {
                 fill.color = android.graphics.Color.WHITE
                 c.drawCircle(x, y, 2f * density, fill)
             }
+            c.restore()
         }
     }
 
