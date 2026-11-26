@@ -15,7 +15,7 @@ enum class TravelMode(
 ) {
     FOOT("A pie", "hiking-mountain", "foot", false, listOf(120.0, 40.0, 12.0)),
     BIKE("En bici", "trekking", "bicycle", false, listOf(300.0, 80.0, 20.0)),
-    CAR("En coche", "car-vario", "motorcar", true, listOf(800.0, 250.0, 50.0));
+    CAR("En coche", "car-fast", "motorcar", true, listOf(800.0, 250.0, 50.0));
 
     companion object {
         fun fromKey(k: String?) = entries.firstOrNull { it.name == k } ?: FOOT
@@ -140,7 +140,9 @@ data class NextManeuver(val maneuver: Maneuver, val distanceM: Double, val then:
  */
 class RouteGuide(route: PlannedRoute, private val announceM: List<Double>) {
     val follow = FollowRoute(route.points)
-    private val maneuvers = route.maneuvers.filter { it.kind != Maneuver.Kind.END }
+    // «Sigue recto» no se anuncia: BRouter lo pone en cada cruce que se pasa de largo (en una ruta
+    // a pie por el centro de Madrid, 6 de 22 indicaciones) y sólo metería ruido.
+    private val maneuvers = route.maneuvers.filter { it.kind != Maneuver.Kind.END && it.kind != Maneuver.Kind.STRAIGHT }
         .map { it to follow.cumulative[it.index] }
     /** Etapa ya dicha de cada maniobra (índice en [announceM]; más alto = más cerca). */
     private val spoken = HashMap<Int, Int>()

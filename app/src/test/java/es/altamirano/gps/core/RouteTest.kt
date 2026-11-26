@@ -93,6 +93,14 @@ class RouteTest {
         assertNotNull(g.next(0.0)!!.then)
     }
 
+    @Test fun seguirRectoNoSeAnuncia() {
+        val pts = (0..10).map { TrackPoint(lat(it * 20.0), lon0) }
+        val g = RouteGuide(PlannedRoute(pts, listOf(Maneuver(3, Maneuver.Kind.STRAIGHT), Maneuver(8, Maneuver.Kind.LEFT)), null),
+            TravelMode.FOOT.announceM)
+        assertEquals(Maneuver.Kind.LEFT, g.next(0.0)!!.maneuver.kind)
+        assertEquals("Gira a la izquierda", g.announce(155.0))
+    }
+
     @Test fun distanciasComoSeDicen() {
         assertEquals("10 metros", RouteGuide.spokenDistance(4.0))
         assertEquals("40 metros", RouteGuide.spokenDistance(38.0))

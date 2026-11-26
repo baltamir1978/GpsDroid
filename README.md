@@ -42,9 +42,14 @@ ubicación por red ni servicios de Google.
   salen todos, los más cerca primero, con su **altitud** y cuánto hay que subir o bajar desde donde
   estás («Altitud 1.245 m · 230 m más arriba»); se comparten en un GPX; al importar un GPX con puntos
   (`<wpt>`) se añaden.
+- **Rutas** («Ruta hasta aquí» en la ficha de un punto): a pie, en bici o en coche, por caminos y
+  carreteras, calculadas **sin conexión** por [BRouter](https://f-droid.org/packages/btools.routingapp/)
+  (app aparte, libre, con los mapas de OpenStreetMap que te bajas por zonas en su «Download
+  Manager»). Indicaciones giro a giro en el mapa y **en voz alta** (hace falta un motor de voz; en
+  GrapheneOS, RHVoice o eSpeak NG), y si te sales calcula otra desde donde estés.
 - **Android Auto**: el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
   que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
-  distancia y a qué mano queda) y el track que se sigue (lo que queda o, fuera de él, hacia dónde volver). En GrapheneOS necesita Google Play aislado y Android Auto; y, como
+  distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador. En GrapheneOS necesita Google Play aislado y Android Auto; y, como
   la app no viene de Google Play, hay que activar **«Fuentes desconocidas»** en los ajustes de
   desarrollador de Android Auto (se abren tocando varias veces la versión en sus ajustes).
 - **Mapas offline**: bajar una zona (alrededor del centro del mapa o de tu posición, o una sierra

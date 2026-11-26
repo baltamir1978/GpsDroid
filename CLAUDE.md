@@ -36,10 +36,9 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**En desarrollo (26-nov-2026, sin versión): navegación con rutas de BRouter.** Lo pidió Bruno («vete
-empezando con la navegación»). Hecho, compila y con pruebas, **sin probar contra BRouter de verdad**
-(ni en el emulador ni en el móvil):
-- `core/Route.kt`: `TravelMode` (a pie `hiking-mountain`, bici `trekking`, coche `car-vario`, con
+**0.6.0 (26-nov-2026): navegación con rutas de BRouter.** Lo pidió Bruno («vete empezando con la
+navegación»).
+- `core/Route.kt`: `TravelMode` (a pie `hiking-mountain`, bici `trekking`, coche `car-fast`, con
   sus distancias de aviso), `Maneuver` (códigos de `VoiceHint` de BRouter, frases en español),
   `BRouterJson` (lee el GeoJSON: coordenadas `[lon, lat, ele]` y `voicehints`
   `[índice, código, salida, distancia, ángulo]`; con `timode=2` salir por la izquierda/derecha llega
@@ -60,9 +59,20 @@ empezando con la navegación»). Hecho, compila y con pruebas, **sin probar cont
   de la zona en su «Download Manager»). En el mapa, la píldora enseña la maniobra en grande (icono de
   Material, distancia, qué hacer y lo que queda). En Android Auto, `RoutingInfo` con `Step` y
   `Maneuver` (tipos de la Car App Library; rotondas CCW con su salida) en vez de la tarjeta.
-- Falta: probar con BRouter (instalarlo y bajar al menos el cuadro de la zona, `W5_N40` para Madrid),
-  ruta desde una pulsación larga en el mapa (no sólo puntos guardados), `NavigationManager` del
-  coche (`navigationStarted`, para el cuadro de instrumentos) y la versión.
+- «Sigue recto» (código 1) no se anuncia: BRouter lo pone en cada cruce que se pasa de largo.
+- Sin motor de voz, `TextToSpeech` avisa del error **dentro del constructor** (antes de que la
+  variable tenga valor): el «sin voz» se marca después, con un `post` al hilo principal (cazado en
+  el emulador, que no trae motor).
+- 30 pruebas y lint sin errores. **Probado en el emulador con BRouter 1.7.10 de F-Droid** (carpeta
+  por defecto `Android/media/btools.routingapp`; el cuadro `W5_N40.rd5`, 92 MB, de
+  `brouter.de/brouter/segments4/`, copiado con `adb push` a `brouter/segments4/`): ruta a pie de
+  Sol a Plaza de España (1,4 km), recálculo al salirse 300 m, el paseo entero con la geometría de
+  la misma ruta pedida al servidor público de BRouter (maniobras en orden, «luego…» en los giros
+  seguidos, hora de llegada, sin salirse) y «Has llegado». Perfiles de serie en BRouter 1.7.10:
+  `hiking-mountain`, `trekking` y `car-fast` (no `car-vario`). **Sin probar en el móvil**: la voz
+  (hace falta un motor: RHVoice o eSpeak NG), bici y coche, y Android Auto.
+- Falta: ruta desde una pulsación larga en el mapa (no sólo puntos guardados) y `NavigationManager`
+  del coche (`navigationStarted`, para el cuadro de instrumentos).
 
 **0.5.0 (26-nov-2026): seguir un track y altitud de los puntos.** Lo pidió Bruno: navegación
 «nivel 1» (guiarse por un GPX, sin calcular rutas) y, en la lista de puntos de Tracks, la altitud.
@@ -301,7 +311,7 @@ capas), escala y atribución; descarga de zonas. Lo demás (grabar, importar, sa
 
 Ideas, si hicieran falta: pintar en el mapa el punto marcado en el perfil; en el coche, mapa orientado hacia donde vas.
 
-**Navegación con rutas calculadas (en desarrollo, ver arriba).** La idea de partida: Con **BRouter** (app
+**Navegación con rutas calculadas (0.6.0, ver arriba).** La idea de partida: Con **BRouter** (app
 aparte, libre, rutas sin conexión con datos de OpenStreetMap por zonas; se le piden por su servicio
 AIDL, como hacen OsmAnd y Locus): a pie, bici o coche, indicaciones giro a giro leídas en español
 (`TextToSpeech`) y, en Android Auto, `NavigationTemplate` con la maniobra. Los servicios en línea

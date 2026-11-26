@@ -154,6 +154,7 @@ class FollowService : Service() {
     private var ttsReady = false
     private var focus: AudioFocusRequest? = null
     private var lastReroute = 0L
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -247,11 +248,20 @@ class FollowService : Service() {
      */
     private fun startVoice() {
         if (tts != null) return
+        // Sin ningún motor instalado, Android avisa del error dentro del propio constructor (antes de
+        // que `tts` tenga valor): por eso lo de no tener voz se hace después, en el hilo principal.
+        val noVoice = {
+            main.post {
+                ttsReady = false
+                tts?.shutdown(); tts = null
+                Following.state.value?.let { Following.set(it.copy(noVoice = it.nav != null)) }
+            }
+        }
         tts = TextToSpeech(this) { status ->
+            if (status != TextToSpeech.SUCCESS) { noVoice(); return@TextToSpeech }
             val t = tts ?: return@TextToSpeech
-            ttsReady = status == TextToSpeech.SUCCESS &&
-                t.setLanguage(Locale.forLanguageTag("es-ES")).let { it != TextToSpeech.LANG_MISSING_DATA && it != TextToSpeech.LANG_NOT_SUPPORTED }
-            if (!ttsReady) { t.shutdown(); tts = null; Following.state.value?.let { Following.set(it.copy(noVoice = true)) }; return@TextToSpeech }
+            ttsReady = t.setLanguage(Locale.forLanguageTag("es-ES")).let { it != TextToSpeech.LANG_MISSING_DATA && it != TextToSpeech.LANG_NOT_SUPPORTED }
+            if (!ttsReady) { noVoice(); return@TextToSpeech }
             t.setAudioAttributes(navAudio)
             t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(id: String?) {}
