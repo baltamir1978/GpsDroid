@@ -112,8 +112,10 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             val f = fol.fix
             if (next != null && fresh != null && f?.status == FollowStatus.ON_TRACK && fol.nav.rerouting.not()) {
                 val d = next.distanceM.let { if (it < 1000) (it / 10).roundToInt() * 10 else (it / 100).roundToInt() * 100 }
+                // Un radar a la vista va en la misma tarjeta, detrás de la maniobra (a 50 m: no rehacerla a cada metro).
+                val radar = fol.radar?.let { r -> " · " + r.copy(distanceM = (r.distanceM / 50).roundToInt() * 50.0).line() } ?: ""
                 return Card(next.maneuver.title(), Following.remainingText(f.copy(remainingM = (f.remainingM / 100).roundToInt() * 100.0)),
-                    null, StepCard(next.maneuver.kind, next.maneuver.exit, next.maneuver.angle, d, next.maneuver.title(), next.then?.title()))
+                    null, StepCard(next.maneuver.kind, next.maneuver.exit, next.maneuver.angle, d, next.maneuver.title() + radar, next.then?.title()))
             }
             return followCard(fol, fresh, recText)
         }

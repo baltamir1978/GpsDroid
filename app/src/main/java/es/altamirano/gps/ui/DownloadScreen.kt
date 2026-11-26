@@ -53,6 +53,7 @@ import es.altamirano.gps.core.MapStyle
 import es.altamirano.gps.core.OfflineZone
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.data.Routing
+import es.altamirano.gps.data.Radars
 import androidx.compose.runtime.LaunchedEffect
 import es.altamirano.gps.data.Prefs
 import es.altamirano.gps.data.Tiles
@@ -211,6 +212,17 @@ fun DownloadScreen() {
         }
 
         Section("Ajustes") {
+            var radars by remember { mutableStateOf(Radars.enabled(context)) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Avisar de radares en coche", fontSize = 15.sp)
+                    Text("Yendo por una ruta en coche: radares fijos y tramos de velocidad media de la DGT (sin Cataluña ni el País Vasco), a 500 m. " +
+                        (Radars.updatedAt(context)?.let { "Lista del " + java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault())) + "." }
+                            ?: "Se actualiza sola cada semana con red."),
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(radars, { radars = it; Radars.setEnabled(context, it) })
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Usar la red", fontSize = 15.sp)

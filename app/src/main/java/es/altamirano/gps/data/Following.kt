@@ -64,6 +64,8 @@ data class FollowState(
     val fix: FollowFix? = null, val nav: Navigation? = null,
     /** Sin motor de voz en el móvil: las indicaciones sólo se ven (y vibran). */
     val noVoice: Boolean = false,
+    /** En coche: el radar que viene (a menos de 500 m) o el tramo de radar en el que estás. */
+    val radar: es.altamirano.gps.core.RadarAlert? = null,
 )
 
 /**
@@ -149,6 +151,7 @@ class FollowService : Service() {
         private const val ALERTS = "following-alerts"
         private const val NOTIFICATION_ID = 2
         private const val ALERT_ID = 3
+        private const val RADAR_ID = 4
         private const val OWNER = "following"
         /** Entre dos recálculos, como poco (BRouter tarda y gasta batería). */
         private const val REROUTE_EVERY_MS = 20_000L
@@ -200,6 +203,10 @@ class FollowService : Service() {
         var route = st.route
         // Antes de llegar a la ruta: lo más cerca que has estado de ella (para ver si te alejas).
         var closestApproach = Double.MAX_VALUE
+        // En coche, los radares de la DGT que hay en la ruta (se rehace con cada ruta nueva).
+        val radarsOn = st.nav?.mode == TravelMode.CAR && Radars.enabled(this)
+        if (radarsOn) Radars.refreshIfOld(this)
+        var radarGuide = if (radarsOn) es.altamirano.gps.core.RadarGuide(st.route, Radars.list(this)) else null
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         scope = s
         s.launch {
@@ -207,7 +214,10 @@ class FollowService : Service() {
                 if (!Gps.isFresh(loc)) return@collect
                 var cur = Following.state.value ?: return@collect
                 // Una ruta nueva (recalculada): se sigue desde cero.
-                if (cur.route !== route) { route = cur.route; follower = TrackFollower(route); closestApproach = Double.MAX_VALUE }
+                if (cur.route !== route) {
+                    route = cur.route; follower = TrackFollower(route); closestApproach = Double.MAX_VALUE
+                    if (radarsOn) radarGuide = es.altamirano.gps.core.RadarGuide(route, Radars.list(this@FollowService))
+                }
                 val event = follower.update(loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy.toDouble() else null,
                     loc.elapsedRealtimeNanos / 1e9)
                 val fix = follower.last ?: return@collect
@@ -227,7 +237,14 @@ class FollowService : Service() {
                         cur = cur.copy(nav = cur.nav?.copy(rerouting = true))
                     }
                 }
+                var radarSay: es.altamirano.gps.core.RadarAlert? = null
+                radarGuide?.let { g ->
+                    val (sayR, showR) = if (fix.status == FollowStatus.ON_TRACK) g.update(fix.match.alongM) else null to null
+                    radarSay = sayR
+                    cur = cur.copy(radar = showR)
+                }
                 Following.set(cur.copy(fix = fix, noVoice = nav != null && !ttsReady && tts == null))
+                radarSay?.let { radarAlert(it) }
                 event?.let { alert(it, Following.state.value ?: cur) }
                 say?.let { speak(it) }
                 val text = Following.state.value?.let { Following.summary(it) } ?: return@collect
@@ -343,10 +360,26 @@ class FollowService : Service() {
         }
     }
 
+    /** Un radar a la vista: por voz si hay motor y, siempre, una notificación que suena y vibra. */
+    private fun radarAlert(a: es.altamirano.gps.core.RadarAlert) {
+        if (ttsReady) speak(a.spoken())
+        val n = Notification.Builder(this, ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(if (a.section) "Tramo de radar" else "Radar")
+            .setContentText(a.line())
+            .setCategory(Notification.CATEGORY_NAVIGATION)
+            .setAutoCancel(true)
+            .setTimeoutAfter(60_000)
+            .setContentIntent(openApp())
+            .build()
+        getSystemService(NotificationManager::class.java).notify(RADAR_ID, n)
+    }
+
     private fun finish() {
         scope?.cancel(); scope = null
         Gps.release(OWNER)
         getSystemService(NotificationManager::class.java).cancel(ALERT_ID)
+        getSystemService(NotificationManager::class.java).cancel(RADAR_ID)
         tts?.shutdown(); tts = null; ttsReady = false
         releaseFocus()
         Following.set(null)

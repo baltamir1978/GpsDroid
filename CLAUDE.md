@@ -36,6 +36,32 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.10.0 (26-nov-2026): avisos de radares en coche.** Bruno: «en el caso de conducción por coche,
+¿podemos activar el aviso de radares en España?».
+- Datos: la lista oficial de la DGT en el Punto de Acceso Nacional (DATEX II 1.0,
+  `nap.dgt.es/datex2/dgt/PredefinedLocationsPublication/radares/content.xml`, ~2 MB): 690 cabinas
+  cinemómetro (`Point`) y 47 tramos de velocidad media (`Linear`; ojo: en el XML el `to` va antes
+  que el `from`). Sin sentido ni límite; sin Cataluña ni el País Vasco (tienen su propio servicio).
+  La fecha de publicación del fichero bajado el 26-nov-2026 era 18-dic-2025: la DGT no lo
+  actualiza a menudo.
+- `core/Radars.kt`: `RadarList` (lee el DATEX con expresiones regulares; CSV compacto
+  `F|T;lat;lon;latFin;lonFin;carretera`) y `RadarGuide`: sitúa cada radar sobre la ruta (a más de
+  40 m no es de esa carretera; un tramo cuenta si la ruta lo recorre en su sentido) y avisa una vez a
+  500 m; en los tramos, también al entrar, y dentro lo recuerda hasta el final.
+- `data/Radars.kt`: copia en `assets/radares.csv` (22 KB, sacada del fichero de la DGT) para ir sin
+  red desde el primer día; con red y «Usar la red», cada semana se baja el de la DGT a
+  `files/radares.csv` (si trae menos de 100, no se usa). Interruptor «Avisar de radares en coche»
+  en los ajustes de Offline (encendido de serie).
+- Sólo yendo por una ruta en coche. Aviso: voz si hay motor y notificación del canal de avisos
+  (suena y vibra; se quita sola al minuto). En la píldora, franja roja «Radar a 350 m · M-40» o «En
+  tramo de radar de velocidad media · A-6»; en Android Auto, detrás de la maniobra.
+- Avisar con una lista de ubicaciones es legal en España (lo prohibido son los detectores).
+- 34 pruebas (2 nuevas: el DATEX real recortado en `src/test/resources/radares-muestra.xml`, y los
+  avisos en una ruta con un radar fijo, otro en otra carretera y un tramo en cada sentido) y lint sin
+  errores. **Probado en el emulador**: 8,2 km por la M-40 recorridos enteros → «Radar a 484 m ·
+  M-40» … «85 m» y desaparece al pasarlo. La notificación no se llegó a ver (quizá ya se había
+  quitado sola). **Sin probar en el móvil.**
+
 **0.9.0 (26-nov-2026): guardar los mapas del camino al empezar.** Bruno: «cuando empiezas un viaje con
 conexión, que descargue todas las teselas del camino ±500 m, por si no hay cobertura más adelante».
 - `core/RouteCorridor`: las teselas que tocan una franja de ±500 m a lo largo del camino (se recorre

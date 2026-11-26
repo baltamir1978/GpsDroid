@@ -76,6 +76,7 @@ fun FollowPill(st: FollowState, onShow: () -> Unit, onClose: () -> Unit) {
                 (heading?.let { " · ${Direction.relative(fix.bearingToTrack, it.toDouble())}" } ?: "")
                 else Following.summary(st)
             Text(detail, fontSize = 12.sp, color = Color.White.copy(alpha = 0.92f))
+            RadarLine(st)
             RouteTilesLine()
         }
         IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "Dejar de seguir", Modifier.size(18.dp), tint = Color.White) }
@@ -98,6 +99,7 @@ private fun ManeuverPill(st: FollowState, next: NextManeuver, tint: Color, onSho
             Text(next.maneuver.title() + (next.then?.let { " · luego ${it.phrase()}" } ?: ""), fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             st.fix?.let { Text(Following.remainingText(it), fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f)) }
+            RadarLine(st)
             RouteTilesLine()
         }
         IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "Parar la ruta", Modifier.size(18.dp), tint = Color.White) }
@@ -115,4 +117,12 @@ internal fun RouteTilesLine() {
         else -> return
     }
     Text(text, fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
+}
+
+/** El radar que viene o el tramo en el que estás, en una franja roja dentro de la píldora. */
+@Composable
+internal fun RadarLine(st: FollowState) {
+    val r = st.radar ?: return
+    Text(r.line(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White,
+        modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFC62828)).padding(horizontal = 8.dp, vertical = 2.dp))
 }
