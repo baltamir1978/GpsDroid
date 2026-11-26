@@ -13,8 +13,8 @@ android {
         applicationId = "es.altamirano.gps"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.6.0"
+        versionCode = 19
+        versionName = "0.7.0"
     }
 
     // La clave de release vive fuera del repositorio; sin ella la release sale sin firmar.
@@ -44,7 +44,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-        aidl = true   // IBRouterService: pedir rutas a BRouter
     }
 }
 
@@ -61,6 +60,7 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.coroutines.android)
     implementation(libs.osmdroid)
+    implementation(libs.brouter.core)   // rutas sin conexión, dentro de la app
     implementation(libs.car.app)
     testImplementation(libs.junit)
 }

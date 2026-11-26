@@ -68,7 +68,7 @@ fun FollowPill(st: FollowState, onShow: () -> Unit, onClose: () -> Unit) {
         Column(Modifier.weight(1f, fill = false).padding(start = 10.dp)) {
             Text(when (fix?.status) {
                 FollowStatus.OFF_TRACK -> if (st.nav?.rerouting == true) "Recalculando la ruta…" else if (st.nav != null) "Fuera de la ruta" else "Fuera del track"
-                FollowStatus.APPROACHING -> "Hacia «${st.name}»"
+                FollowStatus.APPROACHING -> if (st.nav != null) "Hacia el inicio de la ruta" else "Hacia «${st.name}»"
                 else -> st.name
             }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // El título ya dice si estás fuera: aquí, sólo cuánto y hacia dónde volver.

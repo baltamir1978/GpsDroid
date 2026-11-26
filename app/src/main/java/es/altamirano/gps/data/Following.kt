@@ -235,7 +235,7 @@ class FollowService : Service() {
                     speak("Ruta nueva")
                 }
                 // Sin ruta nueva se sigue con la de antes (y la flecha hacia ella); se reintenta más tarde.
-                is Routing.Result.Failed -> Following.set(cur.copy(nav = curNav.copy(rerouting = false)))
+                is Routing.Result.Failed, is Routing.Result.MissingTiles -> Following.set(cur.copy(nav = curNav.copy(rerouting = false)))
             }
         }
     }

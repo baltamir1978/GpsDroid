@@ -2,20 +2,51 @@ package es.altamirano.gps.core
 
 import kotlin.math.roundToInt
 
+/**
+ * Los datos de rutas de BRouter van en cuadros de 5° × 5° (`segments4/W5_N40.rd5`: de 5° O a 0° y
+ * de 40° N a 45° N, Madrid y media España central). Cada cuadro se nombra por su esquina suroeste.
+ */
+object RouteTiles {
+    fun nameAt(lat: Double, lon: Double): String {
+        val lon5 = Math.floorDiv(kotlin.math.floor(lon).toInt(), 5) * 5
+        val lat5 = Math.floorDiv(kotlin.math.floor(lat).toInt(), 5) * 5
+        return (if (lon5 < 0) "W${-lon5}" else "E$lon5") + "_" + (if (lat5 < 0) "S${-lat5}" else "N$lat5")
+    }
+
+    /**
+     * Los cuadros que hacen falta para ir de un sitio a otro: los del rectángulo que los abarca, con
+     * un margen (una ruta puede dar un rodeo por el cuadro de al lado).
+     */
+    fun between(a: Pair<Double, Double>, b: Pair<Double, Double>, marginDeg: Double = 0.1): List<String> {
+        val lats = listOf(minOf(a.first, b.first) - marginDeg, maxOf(a.first, b.first) + marginDeg)
+        val lons = listOf(minOf(a.second, b.second) - marginDeg, maxOf(a.second, b.second) + marginDeg)
+        val out = LinkedHashSet<String>()
+        var lat = lats[0]
+        while (true) {
+            var lon = lons[0]
+            while (true) {
+                out += nameAt(lat, lon)
+                if (lon >= lons[1]) break
+                lon = minOf(lon + 5.0, lons[1])
+            }
+            if (lat >= lats[1]) break
+            lat = minOf(lat + 5.0, lats[1])
+        }
+        return out.toList()
+    }
+}
+
 /** Cómo se va: cada modo con su perfil de BRouter y a qué distancias se avisa de un giro. */
 enum class TravelMode(
     val label: String,
-    /** Perfil de BRouter (`profiles2/<nombre>.brf`); vienen con la app. */
+    /** Perfil de BRouter (`assets/brouter/<nombre>.brf`, de su `misc/profiles2`). */
     val profile: String,
-    /** Si BRouter no tiene ese perfil: su modo de servicio (`v` + `fast`), el que tenga configurado. */
-    val serviceMode: String,
-    val fast: Boolean,
     /** Avisos antes de cada giro: lejos, cerca y ya (metros). */
     val announceM: List<Double>,
 ) {
-    FOOT("A pie", "hiking-mountain", "foot", false, listOf(120.0, 40.0, 12.0)),
-    BIKE("En bici", "trekking", "bicycle", false, listOf(300.0, 80.0, 20.0)),
-    CAR("En coche", "car-fast", "motorcar", true, listOf(800.0, 250.0, 50.0));
+    FOOT("A pie", "hiking-mountain", listOf(120.0, 40.0, 12.0)),
+    BIKE("En bici", "trekking", listOf(300.0, 80.0, 20.0)),
+    CAR("En coche", "car-vario", listOf(800.0, 250.0, 50.0));
 
     companion object {
         fun fromKey(k: String?) = entries.firstOrNull { it.name == k } ?: FOOT

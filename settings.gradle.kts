@@ -10,6 +10,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // El motor de rutas de BRouter (MIT): no está en Maven Central; JitPack lo compila de sus
+        // etiquetas de GitHub. Sólo para él, para que nada más venga de ahí.
+        maven("https://jitpack.io") { content { includeGroup("com.github.abrensch.brouter") } }
     }
 }
 rootProject.name = "GpsDroid"

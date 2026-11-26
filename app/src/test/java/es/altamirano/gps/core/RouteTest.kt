@@ -101,6 +101,18 @@ class RouteTest {
         assertEquals("Gira a la izquierda", g.announce(155.0))
     }
 
+    @Test fun cuadrosDeDatos() {
+        assertEquals("W5_N40", RouteTiles.nameAt(40.4168, -3.7038))   // Madrid
+        assertEquals("E0_N40", RouteTiles.nameAt(41.39, 2.17))         // Barcelona
+        assertEquals("W10_N40", RouteTiles.nameAt(43.36, -8.41))       // A Coruña
+        assertEquals("W20_N25", RouteTiles.nameAt(28.1, -15.4))        // Las Palmas
+        assertEquals("E10_S5", RouteTiles.nameAt(-0.5, 10.2))
+        assertEquals("W5_N40", RouteTiles.nameAt(40.0, -5.0))          // esquina: el de su suroeste
+        // Madrid → Sierra: un cuadro. Madrid → Barcelona: dos.
+        assertEquals(listOf("W5_N40"), RouteTiles.between(40.4168 to -3.7038, 40.79 to -3.98))
+        assertEquals(listOf("W5_N40", "E0_N40"), RouteTiles.between(40.4168 to -3.7038, 41.39 to 2.17))
+    }
+
     @Test fun distanciasComoSeDicen() {
         assertEquals("10 metros", RouteGuide.spokenDistance(4.0))
         assertEquals("40 metros", RouteGuide.spokenDistance(38.0))

@@ -124,12 +124,25 @@ object Gps {
     /** Tras conceder el permiso: los que ya lo pedían no tienen que volver a hacerlo. */
     @Synchronized fun permissionChanged() = update()
 
+    /**
+     * Encender y apagar el GPS son llamadas al sistema (Binder) que pueden tardar si el servicio de
+     * ubicación va lento: en otro hilo, para que la pantalla nunca se quede esperando (en el emulador,
+     * con el GPS simulado atascado, la app daba «no responde» al cambiar de pestaña). Las posiciones
+     * siguen llegando al hilo principal.
+     */
+    private val control by lazy { Handler(android.os.HandlerThread("gps-control").apply { start() }.looper) }
+
     @SuppressLint("MissingPermission")
     private fun update() {
         val want = users.isNotEmpty() && hasPermission()
         if (want == running) return
         running = want
         _active.value = want
+        control.post { apply(want) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun apply(want: Boolean) = runCatching {
         if (want) {
             if (_location.value == null) {
                 lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { _location.value = it }

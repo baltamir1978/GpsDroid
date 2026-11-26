@@ -36,9 +36,30 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**Sin versión todavía (26-nov-2026): fuera el aviso «Sin voz».** Bruno: «no necesito voz». La
-píldora ya no pide instalar un motor de voz; si el móvil tiene uno, la app sigue hablando, y si no,
-las indicaciones sólo se ven (el estado `noVoice` se sigue calculando, pero no se enseña).
+**0.7.0 (26-nov-2026): BRouter dentro de la app.** Bruno, con la app BRouter aparte: «me da todo
+tipo de problemas». Ahora el motor va dentro (`brouter-core` 1.7.9 de **JitPack**, sólo para el grupo
+`com.github.abrensch.brouter` en `settings.gradle.kts`; la 1.7.10 no la tiene JitPack; licencia MIT
+en `assets/brouter/LICENSE.txt`) y ya no hacen falta ni la otra app, ni el AIDL, ni `<queries>`.
+- `data/Routing`: `RoutingContext` con el perfil (`localFunction`), `RoutingParamCollector`
+  (`timode=2`, `heading`), `RoutingEngine(null, null, segmentos, puntos, rc).doRun(60 s)` y
+  `FormatJson` → el mismo `BRouterJson` de antes. Cancelar la corrutina llama a `terminate()`.
+  Perfiles en `assets/brouter` (`hiking-mountain`, `trekking`, `car-vario` —`car-fast` no está en
+  `misc/profiles2`, la app BRouter lo genera— y `lookups.dat`, que el motor busca junto al perfil);
+  se copian a `noBackupFilesDir/brouter/profiles2` (sube `PROFILES_VERSION` si cambian).
+- **Datos**: cuadros de 5° × 5° (`core/RouteTiles`: `W5_N40` = Madrid; se nombran por la esquina
+  suroeste) de `brouter.de/brouter/segments4/`, en `noBackupFilesDir/brouter/segments4`. Al pedir una
+  ruta, si falta alguno de los que cubren origen y destino (con 0,1° de margen) la app pregunta
+  diciendo lo que pesa (HEAD) y lo baja a `.rd5.part` con `Range` para reanudar, renombrando al
+  acabar. En Offline, sección «Datos para rutas»: los cuadros bajados con su tamaño y fecha, y
+  borrarlos. APK: +300 KB.
+- `Gps` enciende y apaga el GPS en un hilo propio (`gps-control`): son llamadas al sistema y, en el
+  emulador con el GPS simulado atascado, la app daba «no responde» al cambiar de pestaña.
+- Fuera el aviso «Sin voz» (Bruno: «no necesito voz»); si hay motor de voz, habla.
+- 31 pruebas y lint sin errores. **Probado en el emulador sin BRouter instalado**: «Ruta hasta
+  aquí» → «Faltan los datos de rutas (W5_N40, 88 MB)» → bajado desde la app → ruta a pie de Sol a
+  Plaza de España igual que con la app BRouter (1,4 km), en coche (empieza en la calle más cercana
+  con coches, a 140 m: «Hacia el inicio de la ruta») y en bici (1,6 km), ~5 s cada una. **Sin probar
+  en el móvil.**
 
 **0.6.0 (26-nov-2026): navegación con rutas de BRouter.** Lo pidió Bruno («vete empezando con la
 navegación»).

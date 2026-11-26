@@ -9,6 +9,8 @@ material3 = "1.5.0-rc01"
 lifecycle = "2.11.0"
 coroutines = "1.11.0"
 osmdroid = "6.1.20"
+# La 1.7.10 no la tiene JitPack; los datos (segments4) y perfiles son los mismos en toda la 1.7.
+brouter = "v1.7.9"
 # Android Auto (plantillas de la Car App Library; la 1.8 aún no es estable).
 carApp = "1.7.0"
 junit = "4.13.2"
@@ -25,6 +27,7 @@ compose-material3 = { module = "androidx.compose.material3:material3", version.r
 compose-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 osmdroid = { module = "org.osmdroid:osmdroid-android", version.ref = "osmdroid" }
+brouter-core = { module = "com.github.abrensch.brouter:brouter-core", version.ref = "brouter" }
 car-app = { module = "androidx.car.app:app", version.ref = "carApp" }
 junit = { module = "junit:junit", version.ref = "junit" }
 

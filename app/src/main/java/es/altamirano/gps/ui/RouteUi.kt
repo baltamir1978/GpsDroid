@@ -2,7 +2,6 @@ package es.altamirano.gps.ui
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.location.Location
 import android.os.Build
 import android.widget.Toast
@@ -57,7 +56,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
-import androidx.core.net.toUri
 import es.altamirano.gps.core.Maneuver
 import es.altamirano.gps.core.Maneuver.Kind
 import es.altamirano.gps.core.PlannedRoute
@@ -67,6 +65,10 @@ import es.altamirano.gps.data.Following
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.data.Routing
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import es.altamirano.gps.core.OfflineZone
+import androidx.compose.material3.LinearWavyProgressIndicator
 import kotlinx.coroutines.launch
 
 /** El dibujo de cada maniobra (los de Material, los mismos que usan los navegadores de Android). */
@@ -97,18 +99,23 @@ private fun lastMode(context: Context) =
     TravelMode.fromKey(context.getSharedPreferences("gps", Context.MODE_PRIVATE).getString("travel_mode", null))
 
 /**
- * «Ruta hasta aquí»: elegir cómo (a pie, en bici, en coche), pedir la ruta a BRouter desde donde
- * estás y empezar a ir por ella. Sin BRouter, explica cómo conseguirlo. [onStarted]: cerrar la ficha.
+ * «Ruta hasta aquí»: elegir cómo (a pie, en bici, en coche), calcular la ruta desde donde estás con
+ * el motor de BRouter que lleva la app y empezar a ir por ella. Si faltan los datos de rutas de la
+ * zona, ofrece bajarlos (una vez; luego van sin conexión). [onStarted]: cerrar la ficha.
  */
 @Composable
 fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var askMode by remember { mutableStateOf(false) }
-    var noBRouter by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var pending by remember { mutableStateOf<Pair<PlannedRoute, TravelMode>?>(null) }
+    // Faltan cuadros: cuáles, lo que pesan (null mientras se pregunta) y con qué modo se iba a calcular.
+    var missing by remember { mutableStateOf<Triple<List<String>, Long?, TravelMode>?>(null) }
+    // Bajando: cuadro, bytes y total.
+    var downloading by remember { mutableStateOf<Triple<String, Long, Long>?>(null) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
 
     val go: (PlannedRoute, TravelMode) -> Unit = { r, mode ->
         Following.startRoute(context, r, w.name, w.lat, w.lon, mode)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
@@ -118,23 +125,42 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         pending?.let { (r, m) -> go(r, m) }; pending = null
     }
-    val calculate: (TravelMode) -> Unit = calc@{ mode ->
+    lateinit var calculate: (TravelMode) -> Unit
+    calculate = calc@{ mode ->
         context.getSharedPreferences("gps", Context.MODE_PRIVATE).edit { putString("travel_mode", mode.name) }
-        val here = loc?.takeIf { Gps.isFresh(it) }
+        // La de ahora, no la de cuando se abrió la ficha: tras bajar un cuadro pueden haber pasado minutos.
+        val here = (Gps.location.value ?: loc)?.takeIf { Gps.isFresh(it) }
         if (here == null) { error = "Todavía no hay posición del GPS: la ruta sale desde donde estás."; return@calc }
         working = scope.launch {
             val r = Routing.route(context, here.latitude to here.longitude, w.lat to w.lon, mode, here.travelHeading(1f))
             working = null
             when (r) {
                 is Routing.Result.Failed -> error = r.message
+                is Routing.Result.MissingTiles -> {
+                    missing = Triple(r.tiles, null, mode)
+                    // Lo que pesan, para decirlo antes de bajar nada.
+                    val sizes = withContext(Dispatchers.IO) { r.tiles.map { Routing.remoteSize(it) } }
+                    if (missing?.first == r.tiles) missing = Triple(r.tiles, sizes.filterNotNull().sum().takeIf { sizes.all { it != null } }, mode)
+                }
                 is Routing.Result.Ok -> if (Build.VERSION.SDK_INT >= 33) {
                     pending = r.route to mode; permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else go(r.route, mode)
             }
         }
     }
+    val downloadThenRoute: (List<String>, TravelMode) -> Unit = { tiles, mode ->
+        downloadJob = scope.launch {
+            for (name in tiles) {
+                downloading = Triple(name, 0L, 0L)
+                val err = Routing.download(context, name) { got, total -> downloading = Triple(name, got, total) }
+                if (err != null) { downloading = null; error = err; return@launch }
+            }
+            downloading = null
+            calculate(mode)
+        }
+    }
 
-    OutlinedButton(onClick = { if (Routing.isInstalled(context)) askMode = true else noBRouter = true }) {
+    OutlinedButton(onClick = { askMode = true }) {
         Icon(Icons.Filled.Directions, null); Text("  Ruta hasta aquí")
     }
 
@@ -142,7 +168,7 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
         title = { Text("Ruta hasta «${w.name}»") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Por caminos y carreteras, calculada por BRouter sin conexión. ¿Cómo vas?", fontSize = 14.sp,
+                Text("Por caminos y carreteras, sin conexión (datos de OpenStreetMap). ¿Cómo vas?", fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val last = lastMode(context)
                 TravelMode.entries.forEach { m ->
@@ -163,48 +189,44 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LoadingIndicator(Modifier.size(40.dp))
-                    Text("  BRouter puede tardar unos segundos si el destino está lejos.", fontSize = 14.sp)
+                    Text("  Puede tardar unos segundos si el destino está lejos.", fontSize = 14.sp)
                 }
             },
             confirmButton = {},
             dismissButton = { TextButton(onClick = { job.cancel(); working = null }) { Text("Cancelar") } })
     }
 
+    missing?.let { (tiles, bytes, mode) ->
+        AlertDialog(onDismissRequest = { missing = null },
+            title = { Text("Faltan los datos de rutas") },
+            text = {
+                Text("Para calcular rutas en esta zona hace falta bajar ${if (tiles.size == 1) "su cuadro de datos" else "${tiles.size} cuadros de datos"} " +
+                    "(${tiles.joinToString()}${bytes?.let { ", " + OfflineZone.formatBytes(it) } ?: ""}). Se baja una vez: luego las rutas " +
+                    "funcionan sin conexión. Mejor con wifi.")
+            },
+            confirmButton = { TextButton(onClick = { missing = null; downloadThenRoute(tiles, mode) }) { Text("Bajar") } },
+            dismissButton = { TextButton(onClick = { missing = null }) { Text("Ahora no") } })
+    }
+
+    downloading?.let { (name, got, total) ->
+        AlertDialog(onDismissRequest = {},
+            title = { Text("Bajando datos de rutas") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Cuadro $name: ${OfflineZone.formatBytes(got)}${if (total > 0) " de " + OfflineZone.formatBytes(total) else ""}", fontSize = 14.sp)
+                    if (total > 0) LinearWavyProgressIndicator(progress = { (got.toFloat() / total).coerceIn(0f, 1f) }, Modifier.fillMaxWidth())
+                    else LinearWavyProgressIndicator(Modifier.fillMaxWidth())
+                    Text("Si lo cancelas, la próxima vez sigue donde se quedó.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { downloadJob?.cancel(); downloading = null }) { Text("Cancelar") } })
+    }
+
     error?.let { e ->
         AlertDialog(onDismissRequest = { error = null },
             title = { Text("No hay ruta") },
             text = { Text(e) },
-            confirmButton = { TextButton(onClick = { error = null }) { Text("Vale") } },
-            dismissButton = if (e.contains("BRouter")) ({
-                TextButton(onClick = { error = null; openBRouter(context) }) { Text("Abrir BRouter") }
-            }) else null)
+            confirmButton = { TextButton(onClick = { error = null }) { Text("Vale") } })
     }
-
-    if (noBRouter) AlertDialog(onDismissRequest = { noBRouter = false },
-        title = { Text("Hace falta BRouter") },
-        text = {
-            Text("Las rutas las calcula BRouter, una app libre y gratuita que funciona sin conexión con los " +
-                "mapas de OpenStreetMap. Instálala, ábrela una vez (elige su carpeta) y, en «Download Manager», " +
-                "baja los cuadros de las zonas por donde vayas a moverte.")
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                noBRouter = false
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Routing.FDROID_URL.toUri())) }
-            }) { Text("F-Droid") }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = {
-                    noBRouter = false
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, "market://details?id=${Routing.PACKAGE}".toUri())) }
-                        .onFailure { Toast.makeText(context, "No hay tienda de apps", Toast.LENGTH_SHORT).show() }
-                }) { Text("Google Play") }
-                TextButton(onClick = { noBRouter = false }) { Text("Cancelar") }
-            }
-        })
-}
-
-private fun openBRouter(context: Context) {
-    context.packageManager.getLaunchIntentForPackage(Routing.PACKAGE)?.let { runCatching { context.startActivity(it) } }
 }

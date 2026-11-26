@@ -52,6 +52,8 @@ import es.altamirano.gps.core.MapLayer
 import es.altamirano.gps.core.MapStyle
 import es.altamirano.gps.core.OfflineZone
 import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.Routing
+import androidx.compose.runtime.LaunchedEffect
 import es.altamirano.gps.data.Prefs
 import es.altamirano.gps.data.Tiles
 import kotlinx.coroutines.Dispatchers
@@ -177,6 +179,35 @@ fun DownloadScreen() {
                 }
             }
             Text("Incluye lo que se va viendo en el mapa, no sólo las descargas.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        Section("Datos para rutas") {
+            // Los cuadros de BRouter: se bajan al pedir la primera ruta en una zona; aquí se ven y se borran.
+            val routeTiles by Routing.tiles.collectAsState()
+            LaunchedEffect(Unit) { Routing.refreshTiles(context) }
+            var deleteTile by remember { mutableStateOf<Routing.Tile?>(null) }
+            if (routeTiles.isEmpty()) Text("Ninguno todavía. Se bajan solos (preguntando) la primera vez que pides una ruta en una zona: cada cuadro cubre 5° × 5° y pesa de 20 a 170 MB.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            routeTiles.forEach { tile ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(tile.name, fontSize = 15.sp)
+                        Text(OfflineZone.formatBytes(tile.bytes) + " · bajado el " +
+                            java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.Instant.ofEpochMilli(tile.modified).atZone(java.time.ZoneId.systemDefault())),
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = { deleteTile = tile }) { Text("Borrar") }
+                }
+            }
+            Text("Datos de rutas: © colaboradores de OpenStreetMap (ODbL), preparados por BRouter.", fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            deleteTile?.let { tile ->
+                AlertDialog(onDismissRequest = { deleteTile = null },
+                    title = { Text("¿Borrar ${tile.name}?") },
+                    text = { Text("Sin él no se pueden calcular rutas en esa zona hasta volver a bajarlo (${OfflineZone.formatBytes(tile.bytes)}).") },
+                    confirmButton = { TextButton(onClick = { Routing.deleteTile(context, tile.name); deleteTile = null }) { Text("Borrar") } },
+                    dismissButton = { TextButton(onClick = { deleteTile = null }) { Text("Cancelar") } })
+            }
         }
 
         Section("Ajustes") {

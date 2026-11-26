@@ -1,16 +1,12 @@
 package es.altamirano.gps.data
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RoutingTest {
-    @Test fun erroresDeBRouterEnCastellano() {
-        assertTrue(Routing.message("datafile W5_N40.rd5 not found").startsWith("Faltan los datos de esta zona"))
-        assertTrue(Routing.message("from-position not mapped in existing datafile").startsWith("Faltan") ||
-            Routing.message("from-position not mapped in existing datafile").startsWith("No hay caminos"))
-        assertEquals("No hay caminos cerca del inicio o del destino", Routing.message("to-position not mapped"))
-        // JSON tal cual: no se toca.
-        assertEquals("{\"a\":1}", Routing.decompress(" {\"a\":1} "))
+    @Test fun erroresDelMotorEnCastellano() {
+        assertEquals("Faltan los datos de rutas de esta zona", Routing.message("datafile W5_N40.rd5 not found"))
+        assertEquals("No hay caminos cerca del inicio o del destino", Routing.message("to-position not mapped in existing datafile"))
+        assertEquals("La ruta tarda demasiado en calcularse: prueba con un destino más cerca", Routing.message("operation killed by thread-priority-watchdog after 60 seconds"))
     }
 }
