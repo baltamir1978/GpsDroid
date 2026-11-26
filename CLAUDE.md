@@ -36,6 +36,30 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.11.0 (26-nov-2026): más radares, ajustes de avisos (también en el coche) y la velocidad en Android
+Auto.** Bruno pasó «Radares Anunciados» (geiserx.github.io/radares-anunciados-ha) y preguntó por
+OpenStreetMap; luego: «que sea configurable la distancia de aviso y el tipo de aviso en la pantalla
+de Android Auto, y la velocidad del coche en un simbolito en una esquina».
+- Fuente principal: el GeoJSON de Radares Anunciados (`feed.geojson`, ~2,6 MB, cada 6 h; ODbL por
+  OSM; proyecto de un particular, GPL): DGT, Servei Català de Trànsit, Euskadi, ayuntamientos y OSM
+  (`highway=speed_camera`), sin repetidos. Se usa `fixed`/`trailer` → `FIXED`, `stretch` (la
+  línea) → `SECTION` (o `MOBILE_STRETCH` si es `dgt_invive`), `section` sólo si no es un extremo
+  `-from`/`-to` (Cataluña da un punto), `mobile_announced` → `MOBILE` con `valid_from/to`; fuera
+  `mobile_recurring` (multas de hace meses) y `reported` (notas sin confirmar). `maxspeed` y, si
+  `direction` es un rumbo en grados (OSM), se descartan los que vigilan el otro sentido (más de 90°
+  con la ruta). Respaldo: el DATEX de la DGT. `org.json` en las pruebas (`testImplementation`).
+- `assets/radares.csv` (195 KB, 4.022: 2.330 fijos, 299 tramos, 68 móviles, 1.325 tramos de móvil)
+  sacado del feed; con red, cada día. La lista «F;/T;» que guardó la 0.10.0 se tira al actualizar.
+- `RadarSettings` (`data/Radars`): encendido, distancia (300/500/800/1000 m), modo (con sonido /
+  sólo en pantalla) y clases (de serie, todo menos los tramos de radar móvil de la DGT). En Offline →
+  Ajustes y en Android Auto (`RadarSettingsCarScreen`, desde el engranaje de la lista de puntos: en
+  el mapa no caben más botones). Cambiarlos con la ruta en marcha rehace la guía.
+- Android Auto: `SpeedOverlay` en el mapa del coche, abajo a la izquierda de lo visible: la velocidad
+  del GPS en km/h; en rojo si el radar que viene trae límite y vas por encima.
+- 36 pruebas y lint sin errores. **Probado en el emulador**: los ajustes se ven en Offline. **Sin
+  probar**: la pantalla de ajustes y la velocidad en Android Auto (no hay DHU), la descarga del feed
+  en el móvil.
+
 **0.10.0 (26-nov-2026): avisos de radares en coche.** Bruno: «en el caso de conducción por coche,
 ¿podemos activar el aviso de radares en España?».
 - Datos: la lista oficial de la DGT en el Punto de Acceso Nacional (DATEX II 1.0,

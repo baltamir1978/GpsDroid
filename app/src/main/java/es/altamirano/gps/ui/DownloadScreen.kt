@@ -54,6 +54,9 @@ import es.altamirano.gps.core.OfflineZone
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.data.Routing
 import es.altamirano.gps.data.Radars
+import es.altamirano.gps.data.RadarSettings
+import es.altamirano.gps.data.RadarAlertMode
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.LaunchedEffect
 import es.altamirano.gps.data.Prefs
 import es.altamirano.gps.data.Tiles
@@ -212,17 +215,7 @@ fun DownloadScreen() {
         }
 
         Section("Ajustes") {
-            var radars by remember { mutableStateOf(Radars.enabled(context)) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Avisar de radares en coche", fontSize = 15.sp)
-                    Text("Yendo por una ruta en coche: radares fijos y tramos de velocidad media de la DGT (sin Cataluña ni el País Vasco), a 500 m. " +
-                        (Radars.updatedAt(context)?.let { "Lista del " + java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault())) + "." }
-                            ?: "Se actualiza sola cada semana con red."),
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(radars, { radars = it; Radars.setEnabled(context, it) })
-            }
+            RadarSettingsCard(context)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Usar la red", fontSize = 15.sp)
@@ -239,6 +232,8 @@ fun DownloadScreen() {
             }
         }
         Text("Mapas: ${MapLayer.ATTRIBUTION} (CC BY 4.0).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Radares: Radares Anunciados (ODbL) con datos de la DGT, el Servei Català de Trànsit, Euskadi, ayuntamientos y © colaboradores de OpenStreetMap.",
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         // Para saber qué versión hay en el móvil sin ir a los ajustes de Android.
         Text("IGN GPS ${es.altamirano.gps.BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -259,6 +254,51 @@ private fun Section(title: String, content: @Composable () -> Unit) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             content()
+        }
+    }
+}
+
+/** Los ajustes de los avisos de radares: encendido, a qué distancia, cómo y de qué clases. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun RadarSettingsCard(context: android.content.Context) {
+    val s by Radars.settingsFlow(context).collectAsState()
+    val cur = s ?: return
+    val set: (RadarSettings) -> Unit = { Radars.save(context, it) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Avisar de radares en coche", fontSize = 15.sp)
+            Text("Yendo por una ruta en coche: radares de la DGT, Cataluña, Euskadi, ayuntamientos y OpenStreetMap (lista de Radares Anunciados). " +
+                (Radars.updatedAt(context)?.let { "Lista del " + java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault())) + "." }
+                    ?: "Se actualiza sola cada día con red."),
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(cur.enabled, { set(cur.copy(enabled = it)) })
+    }
+    if (!cur.enabled) return
+    Text("Avisar a", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RadarSettings.DISTANCES.forEach { d ->
+            FilterChip(selected = cur.distanceM == d, onClick = { set(cur.copy(distanceM = d)) },
+                label = { Text(if (d >= 1000) "${d / 1000} km" else "$d m") })
+        }
+    }
+    Text("Cómo", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RadarAlertMode.entries.forEach { m ->
+            FilterChip(selected = cur.mode == m, onClick = { set(cur.copy(mode = m)) }, label = { Text(m.label) })
+        }
+    }
+    Text("De qué radares", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    listOf(
+        es.altamirano.gps.core.RadarKind.FIXED to "Fijos y en remolque",
+        es.altamirano.gps.core.RadarKind.SECTION to "Tramos de velocidad media",
+        es.altamirano.gps.core.RadarKind.MOBILE to "Móviles anunciados (el día que están)",
+        es.altamirano.gps.core.RadarKind.MOBILE_STRETCH to "Tramos donde la DGT pone radares móviles (muchos; casi nunca hay uno)",
+    ).forEach { (k, label) ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(k in cur.kinds, { on -> set(cur.copy(kinds = if (on) cur.kinds + k else cur.kinds - k)) })
+            Text(label, fontSize = 14.sp)
         }
     }
 }

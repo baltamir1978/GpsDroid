@@ -43,6 +43,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     private var track: List<TrackPoint> = emptyList()
     private var following: FollowState? = null
     private var zoom = prefs.view?.third?.coerceAtLeast(13.0) ?: 15.0
+    private var speed: SpeedOverlay? = null
 
     var style: MapStyle = prefs.style
         private set
@@ -70,6 +71,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
             minZoomLevel = 5.0
             sc.install(this)
             overlays += ScaleBarOverlay(this).apply { setScaleBarOffset((16 * density).toInt(), (16 * density).toInt()) }
+            overlays += SpeedOverlay(density).also { speed = it; it.area = visible }
             controller.setZoom(zoom)
             val start = location ?: prefs.last?.let { l -> Location("").apply { latitude = l.first; longitude = l.second } }
             controller.setCenter(start?.let { GeoPoint(it.latitude, it.longitude) } ?: GeoPoint(40.2, -3.7))
@@ -87,6 +89,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
 
     override fun onVisibleAreaChanged(visibleArea: Rect) {
         visible = visibleArea
+        speed?.area = visibleArea
         applyVisibleArea(visibleArea)
     }
 
@@ -143,6 +146,12 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         sc.points.from = location?.takeIf { Gps.isFresh(it) }?.let { it.latitude to it.longitude }
         sc.setTrack(sc.recording, track)
         sc.setFollow(following, location)
+        // La velocidad del GPS (en m/s) en km/h; sin señal, nada.
+        speed?.let { s ->
+            val loc = location?.takeIf { Gps.isFresh(it) && it.hasSpeed() }
+            s.speedKmh = loc?.let { kotlin.math.round(it.speed * 3.6f).toInt() }
+            s.limitKmh = following?.radar?.maxspeed
+        }
         m.invalidate()
     }
 
@@ -153,6 +162,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     }
 
     fun release() {
+        speed = null
         map?.let { m -> m.onPause(); scene?.release(m) }
         presentation?.dismiss()
         display?.release()

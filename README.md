@@ -52,7 +52,9 @@ ubicación por red ni servicios de Google.
   coche entra por pistas de tierra si por carretera no llega, y si al final no hay camino hasta el
   punto, lo avisa y guía en línea recta. Al empezar a seguir una ruta o un track con conexión, guarda
   los mapas de todo el camino (±500 m) por si más adelante no hay cobertura. En coche avisa de los
-  radares fijos y de tramo de la DGT que hay en la ruta (lista oficial, sin Cataluña ni el País Vasco).
+  radares que hay en la ruta (fijos, tramos y móviles anunciados de la DGT, Cataluña, Euskadi,
+  ayuntamientos y OpenStreetMap, vía Radares Anunciados), con la distancia, el modo y las clases a
+  elegir; en Android Auto, además, la velocidad en una esquina.
 - **Android Auto**: el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
   que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
   distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador. En GrapheneOS necesita Google Play aislado y Android Auto; y, como
@@ -77,6 +79,7 @@ Necesita `../droid-common` clonado al lado (tema y piezas comunes de las apps).
 ## Mapas y datos
 
 Datos de rutas: © colaboradores de OpenStreetMap (ODbL), preparados por BRouter (MIT). Radares:
-Dirección General de Tráfico (Punto de Acceso Nacional).
+[Radares Anunciados](https://geiserx.github.io/radares-anunciados-ha/) (ODbL; DGT, SCT, Euskadi,
+ayuntamientos y © colaboradores de OpenStreetMap) y Dirección General de Tráfico (Punto de Acceso Nacional).
 
 © Instituto Geográfico Nacional de España, CC BY 4.0 (la atribución se ve siempre en el mapa).

@@ -13,8 +13,8 @@ android {
         applicationId = "es.altamirano.gps"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.10.0"
+        versionCode = 25
+        versionName = "0.11.0"
     }
 
     // La clave de release vive fuera del repositorio; sin ella la release sale sin firmar.
@@ -63,6 +63,8 @@ dependencies {
     implementation(libs.brouter.core)   // rutas sin conexión, dentro de la app
     implementation(libs.car.app)
     testImplementation(libs.junit)
+    // org.json viene con Android, pero en las pruebas de JVM sólo hay esqueletos: la de verdad para leer el GeoJSON de radares.
+    testImplementation("org.json:json:20240303")
 }
 
 kotlin {

@@ -32,6 +32,7 @@ import es.altamirano.gps.core.RouteGuide
 import es.altamirano.gps.core.TrackFollower
 import es.altamirano.gps.core.TravelMode
 import es.altamirano.gps.ui.MainActivity
+
 import es.altamirano.gps.ui.travelHeading
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -204,9 +205,15 @@ class FollowService : Service() {
         // Antes de llegar a la ruta: lo más cerca que has estado de ella (para ver si te alejas).
         var closestApproach = Double.MAX_VALUE
         // En coche, los radares de la DGT que hay en la ruta (se rehace con cada ruta nueva).
-        val radarsOn = st.nav?.mode == TravelMode.CAR && Radars.enabled(this)
+        val radarsOn = st.nav?.mode == TravelMode.CAR && Radars.settings(this).enabled
         if (radarsOn) Radars.refreshIfOld(this)
-        var radarGuide = if (radarsOn) es.altamirano.gps.core.RadarGuide(st.route, Radars.list(this)) else null
+        // Con los ajustes de ahora (distancia, clases) y la fecha de hoy (los móviles anunciados).
+        fun newRadarGuide(r: FollowRoute) = Radars.settings(this).let { s ->
+            es.altamirano.gps.core.RadarGuide(r, Radars.list(this), s.distanceM.toDouble(), s.kinds, java.time.LocalDate.now().toString())
+        }
+        var radarGuide = if (radarsOn) newRadarGuide(st.route) else null
+        // Cambiar los ajustes (desde el móvil o el coche) con la ruta en marcha: se rehace la guía.
+        var radarSettings = Radars.settings(this)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         scope = s
         s.launch {
@@ -216,7 +223,7 @@ class FollowService : Service() {
                 // Una ruta nueva (recalculada): se sigue desde cero.
                 if (cur.route !== route) {
                     route = cur.route; follower = TrackFollower(route); closestApproach = Double.MAX_VALUE
-                    if (radarsOn) radarGuide = es.altamirano.gps.core.RadarGuide(route, Radars.list(this@FollowService))
+                    if (radarsOn) radarGuide = newRadarGuide(route)
                 }
                 val event = follower.update(loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy.toDouble() else null,
                     loc.elapsedRealtimeNanos / 1e9)
@@ -238,6 +245,10 @@ class FollowService : Service() {
                     }
                 }
                 var radarSay: es.altamirano.gps.core.RadarAlert? = null
+                if (st.nav?.mode == TravelMode.CAR) {
+                    val s = Radars.settings(this@FollowService)
+                    if (s != radarSettings) { radarSettings = s; radarGuide = if (s.enabled) newRadarGuide(route) else null }
+                }
                 radarGuide?.let { g ->
                     val (sayR, showR) = if (fix.status == FollowStatus.ON_TRACK) g.update(fix.match.alongM) else null to null
                     radarSay = sayR
@@ -362,10 +373,12 @@ class FollowService : Service() {
 
     /** Un radar a la vista: por voz si hay motor y, siempre, una notificación que suena y vibra. */
     private fun radarAlert(a: es.altamirano.gps.core.RadarAlert) {
+        // «Sólo en pantalla»: la franja roja basta, sin sonar.
+        if (Radars.settings(this).mode == RadarAlertMode.SILENT) return
         if (ttsReady) speak(a.spoken())
         val n = Notification.Builder(this, ALERTS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if (a.section) "Tramo de radar" else "Radar")
+            .setContentTitle(a.kind.label)
             .setContentText(a.line())
             .setCategory(Notification.CATEGORY_NAVIGATION)
             .setAutoCancel(true)

@@ -282,6 +282,10 @@ class PointsCarScreen(car: CarContext) : Screen(car) {
                 Direction.bearingDeg(loc.latitude, loc.longitude, w.lat, w.lon)))
             list.addItem(row.build())
         }
-        return ListTemplate.Builder().setTitle("Puntos").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
+        // Los ajustes de radares, aquí: en el mapa no caben más botones (la plantilla deja cuatro y cuatro).
+        val strip = androidx.car.app.model.ActionStrip.Builder().addAction(Action.Builder()
+            .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.car_settings)).build())
+            .setOnClickListener { screenManager.push(RadarSettingsCarScreen(carContext)) }.build()).build()
+        return ListTemplate.Builder().setTitle("Puntos").setHeaderAction(Action.BACK).setActionStrip(strip).setSingleList(list.build()).build()
     }
 }

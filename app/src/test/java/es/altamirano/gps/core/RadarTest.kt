@@ -7,24 +7,43 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.cos
 
-/** Radares de la DGT: leer su DATEX II y avisar de los que hay en la ruta. */
+/** Radares: leer el GeoJSON de Radares Anunciados y el DATEX de la DGT, y avisar de los de la ruta. */
 class RadarTest {
-    @Test fun leeElDatexDeLaDgt() {
-        // Un tramo y una cabina sacados tal cual del fichero de la DGT (noviembre de 2026).
-        val xml = javaClass.classLoader!!.getResource("radares-muestra.xml")!!.readText()
-        val list = RadarList.parseDatex(xml)
+    private fun resource(name: String) = javaClass.classLoader!!.getResource(name)!!.readText()
+
+    @Test fun leeElFeedDeRadaresAnunciados() {
+        // Uno de cada clase sacado tal cual del feed (noviembre de 2026).
+        val list = RadarList.parseFeed(resource("radares-feed-muestra.geojson"))
+        // Fuera: los extremos «-from» del tramo (va la línea), las multas antiguas y las notas sin confirmar.
+        assertEquals(listOf(RadarKind.FIXED, RadarKind.SECTION, RadarKind.MOBILE_STRETCH, RadarKind.SECTION, RadarKind.SECTION,
+            RadarKind.FIXED, RadarKind.MOBILE).sorted(), list.map { it.kind }.sorted())
+        val dgtTramo = list.first { it.kind == RadarKind.SECTION && it.road == "Z-40" }
+        assertEquals(41.6088, dgtTramo.lat, 1e-4)
+        assertEquals(41.6192, dgtTramo.endLat!!, 1e-4)
+        val osm = list.first { it.kind == RadarKind.SECTION && it.bearing != null }
+        assertNotNull(osm.maxspeed)
+        val movil = list.first { it.kind == RadarKind.MOBILE }
+        assertEquals("2026-11-25", movil.validFrom)
+        assertTrue(movil.validOn("2026-11-25"))
+        assertTrue(!movil.validOn("2026-11-26"))
+        // El nombre de la carretera sale del nombre si no viene aparte.
+        assertEquals("A-2", list.first { it.kind == RadarKind.FIXED && it.maxspeed == null }.road)
+        // Ida y vuelta por el formato que se guarda en el móvil.
+        val back = RadarList.fromCsv(RadarList.toCsv(list))
+        assertEquals(list.map { Triple(it.kind, it.road, it.maxspeed) }, back.map { Triple(it.kind, it.road, it.maxspeed) })
+        assertEquals(list.map { it.validTo }, back.map { it.validTo })
+    }
+
+    @Test fun leeElDatexDeLaDgtYLaListaVieja() {
+        val list = RadarList.parseDatex(resource("radares-muestra.xml"))
         assertEquals(2, list.size)
-        val tramo = list.first { it.section }
+        val tramo = list.first { it.kind == RadarKind.SECTION }
         assertEquals("Z-40", tramo.road)
         assertEquals(41.6088, tramo.lat, 1e-4)      // el principio es el «from»
-        assertEquals(41.6192, tramo.endLat!!, 1e-4)
-        val cabina = list.first { !it.section }
-        assertEquals("A-2", cabina.road)
-        assertEquals(41.30326, cabina.lat, 1e-5)
-        // Ida y vuelta por el formato que se guarda en el móvil (coordenadas con 6 decimales).
-        val back = RadarList.fromCsv(RadarList.toCsv(list))
-        assertEquals(list.map { it.section to it.road }, back.map { it.section to it.road })
-        back.zip(list).forEach { (b, l) -> assertEquals(l.lat, b.lat, 1e-6); assertEquals(l.endLat ?: 0.0, b.endLat ?: 0.0, 1e-6) }
+        assertEquals("A-2", list.first { it.kind == RadarKind.FIXED }.road)
+        // La copia guardada por la 0.10.0 («F»/«T» y seis campos) se sigue leyendo.
+        val old = RadarList.fromCsv("F;41.303260;-1.944880;;;A-2\nT;41.608800;-0.915697;41.619200;-0.949600;Z-40")
+        assertEquals(listOf(RadarKind.FIXED, RadarKind.SECTION), old.map { it.kind })
     }
 
     private val lat0 = 40.5
@@ -37,27 +56,45 @@ class RadarTest {
         // 10 km al norte; un radar fijo a 3 km, otro a 300 m al este (otra carretera) y un tramo de 6 a 8 km.
         val route = FollowRoute((0..100).map { at(it * 100.0) })
         val radars = listOf(
-            Radar(false, at(3000.0).lat, at(3000.0).lon, "A-1"),
-            Radar(false, at(5000.0, 300.0).lat, at(5000.0, 300.0).lon, "M-40"),
-            Radar(true, at(6000.0).lat, at(6000.0).lon, "A-1", at(8000.0).lat, at(8000.0).lon),
+            Radar(RadarKind.FIXED, at(3000.0).lat, at(3000.0).lon, "A-1", maxspeed = 100),
+            Radar(RadarKind.FIXED, at(5000.0, 300.0).lat, at(5000.0, 300.0).lon, "M-40"),
+            Radar(RadarKind.SECTION, at(6000.0).lat, at(6000.0).lon, "A-1", at(8000.0).lat, at(8000.0).lon),
             // El mismo tramo en sentido contrario: no es de esta ruta.
-            Radar(true, at(8000.0, 10.0).lat, at(8000.0, 10.0).lon, "A-1", at(6000.0, 10.0).lat, at(6000.0, 10.0).lon),
+            Radar(RadarKind.SECTION, at(8000.0, 10.0).lat, at(8000.0, 10.0).lon, "A-1", at(6000.0, 10.0).lat, at(6000.0, 10.0).lon),
         )
         val g = RadarGuide(route, radars)
         assertEquals(2, g.count)
         assertNull(g.update(2000.0).first)
         val (say, show) = g.update(2510.0)
-        assertEquals("Radar a 500 metros", say!!.spoken())
-        assertEquals("Radar a 490 m · A-1", show!!.line())
-        // Una sola vez por radar, aunque se siga viendo.
+        assertEquals("Radar a 500 metros, límite 100", say!!.spoken())
+        assertEquals("Radar a 490 m · 100 km/h · A-1", show!!.line())
         val again = g.update(2700.0)
         assertNull(again.first)
         assertNotNull(again.second)
         assertNull(g.update(3200.0).second)
-        // El tramo: aviso antes y al entrar; dentro se enseña hasta el final.
-        assertTrue(g.update(5600.0).first!!.spoken().startsWith("Tramo de radar de velocidad media a 400"))
-        assertEquals("Entras en un tramo de radar de velocidad media", g.update(6050.0).first!!.spoken())
-        assertEquals("En tramo de radar de velocidad media · A-1", g.update(7500.0).second!!.line())
+        assertTrue(g.update(5600.0).first!!.spoken().startsWith("Tramo de radar a 400"))
+        assertEquals("Entras en un tramo de radar", g.update(6050.0).first!!.spoken())
+        assertEquals("En tramo de radar · A-1", g.update(7500.0).second!!.line())
         assertNull(g.update(8100.0).second)
+    }
+
+    @Test fun distanciaClasesFechaYSentido() {
+        val route = FollowRoute((0..100).map { at(it * 100.0) })
+        val radars = listOf(
+            Radar(RadarKind.FIXED, at(3000.0).lat, at(3000.0).lon, "A-1"),
+            // Vigila a los que van hacia el sur (rumbo 180): no avisa yendo al norte.
+            Radar(RadarKind.FIXED, at(4000.0).lat, at(4000.0).lon, "A-1", bearing = 180.0),
+            Radar(RadarKind.FIXED, at(4500.0).lat, at(4500.0).lon, "A-1", bearing = 5.0),
+            Radar(RadarKind.MOBILE, at(5000.0).lat, at(5000.0).lon, "A-1", validFrom = "2026-11-25", validTo = "2026-11-25"),
+            // Los tramos de radar móvil valen en los dos sentidos.
+            Radar(RadarKind.MOBILE_STRETCH, at(9000.0).lat, at(9000.0).lon, "A-1", at(7000.0).lat, at(7000.0).lon),
+        )
+        val all = setOf(RadarKind.FIXED, RadarKind.SECTION, RadarKind.MOBILE, RadarKind.MOBILE_STRETCH)
+        assertEquals(4, RadarGuide(route, radars, kinds = all, today = "2026-11-25").count)
+        assertEquals(3, RadarGuide(route, radars, kinds = all, today = "2026-11-26").count)
+        assertEquals(2, RadarGuide(route, radars, today = "2026-11-26").count)   // sin tramos de móvil
+        // A 1 km avisa antes.
+        val far = RadarGuide(route, radars, warnM = 1000.0)
+        assertNotNull(far.update(2010.0).first)
     }
 }
