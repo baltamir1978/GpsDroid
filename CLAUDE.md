@@ -36,6 +36,10 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**Sin versión todavía (26-nov-2026): fuera el aviso «Sin voz».** Bruno: «no necesito voz». La
+píldora ya no pide instalar un motor de voz; si el móvil tiene uno, la app sigue hablando, y si no,
+las indicaciones sólo se ven (el estado `noVoice` se sigue calculando, pero no se enseña).
+
 **0.6.0 (26-nov-2026): navegación con rutas de BRouter.** Lo pidió Bruno («vete empezando con la
 navegación»).
 - `core/Route.kt`: `TravelMode` (a pie `hiking-mountain`, bici `trekking`, coche `car-fast`, con

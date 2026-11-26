@@ -97,7 +97,6 @@ private fun ManeuverPill(st: FollowState, next: NextManeuver, tint: Color, onSho
             Text(next.maneuver.title() + (next.then?.let { " · luego ${it.phrase()}" } ?: ""), fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             st.fix?.let { Text(Following.remainingText(it), fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f)) }
-            if (st.noVoice) Text("Sin voz: instala un motor de voz (RHVoice, eSpeak NG)", fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
         }
         IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "Parar la ruta", Modifier.size(18.dp), tint = Color.White) }
     }

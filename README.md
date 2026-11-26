@@ -45,8 +45,7 @@ ubicación por red ni servicios de Google.
 - **Rutas** («Ruta hasta aquí» en la ficha de un punto): a pie, en bici o en coche, por caminos y
   carreteras, calculadas **sin conexión** por [BRouter](https://f-droid.org/packages/btools.routingapp/)
   (app aparte, libre, con los mapas de OpenStreetMap que te bajas por zonas en su «Download
-  Manager»). Indicaciones giro a giro en el mapa y **en voz alta** (hace falta un motor de voz; en
-  GrapheneOS, RHVoice o eSpeak NG), y si te sales calcula otra desde donde estés.
+  Manager»). Indicaciones giro a giro en el mapa y en voz alta si el móvil tiene motor de voz, y si te sales calcula otra desde donde estés.
 - **Android Auto**: el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
   que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
   distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador. En GrapheneOS necesita Google Play aislado y Android Auto; y, como
