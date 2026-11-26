@@ -12,6 +12,8 @@ enum class RadarKind(val label: String) {
     MOBILE("Radar móvil"),
     /** Tramo en el que la DGT puede poner radares móviles (no quiere decir que haya uno hoy). */
     MOBILE_STRETCH("Tramo de radar móvil"),
+    /** Cámara de semáforo en rojo (de los ayuntamientos; datos de OpenStreetMap). */
+    RED_LIGHT("Cámara de semáforo"),
 }
 
 /**
@@ -77,6 +79,40 @@ object RadarList {
                 p.optString("valid_to").takeIf { it.length >= 10 }?.take(10))
         }
         return out
+    }
+
+    /**
+     * Las cámaras de semáforo de OpenStreetMap (respuesta de Overpass con `out body; >; out skel`):
+     * relaciones `type=enforcement` + `enforcement=traffic_signals` (el semáforo vigilado es el
+     * miembro `to` —o `force`—, la cámara el `device`, y de `from` a `to` va el sentido que controla)
+     * y algún nodo suelto con `enforcement=traffic_signals`.
+     */
+    fun parseOverpassRedLights(json: String): List<Radar> {
+        val els = org.json.JSONObject(json).getJSONArray("elements")
+        val nodes = HashMap<Long, Pair<Double, Double>>()
+        val loose = ArrayList<Radar>()
+        for (i in 0 until els.length()) {
+            val e = els.getJSONObject(i)
+            if (e.optString("type") != "node" || !e.has("lat")) continue
+            val pos = e.getDouble("lat") to e.getDouble("lon")
+            nodes[e.getLong("id")] = pos
+            if (e.optJSONObject("tags")?.optString("enforcement") == "traffic_signals")
+                loose += Radar(RadarKind.RED_LIGHT, pos.first, pos.second, "")
+        }
+        val out = ArrayList<Radar>()
+        for (i in 0 until els.length()) {
+            val e = els.getJSONObject(i)
+            if (e.optString("type") != "relation") continue
+            val members = e.optJSONArray("members") ?: continue
+            fun role(vararg r: String): Pair<Double, Double>? = (0 until members.length()).map { members.getJSONObject(it) }
+                .firstOrNull { it.optString("type") == "node" && it.optString("role") in r && nodes.containsKey(it.getLong("ref")) }
+                ?.let { nodes[it.getLong("ref")] }
+            val at = role("to", "force") ?: role("device") ?: continue
+            val from = role("from")
+            val bearing = from?.takeIf { it != at }?.let { Direction.bearingDeg(it.first, it.second, at.first, at.second) }
+            out += Radar(RadarKind.RED_LIGHT, at.first, at.second, e.optJSONObject("tags")?.optString("name").orEmpty(), bearing = bearing)
+        }
+        return out + loose
     }
 
     /** «Radar fijo A-2 km 202.3 (sentido ZARAGOZA)» → «A-2». */
@@ -145,7 +181,7 @@ data class RadarAlert(val kind: RadarKind, val distanceM: Double, val road: Stri
  */
 class RadarGuide(
     route: FollowRoute, radars: List<Radar>, private val warnM: Double = 500.0,
-    kinds: Set<RadarKind> = setOf(RadarKind.FIXED, RadarKind.SECTION, RadarKind.MOBILE),
+    kinds: Set<RadarKind> = setOf(RadarKind.FIXED, RadarKind.SECTION, RadarKind.MOBILE, RadarKind.RED_LIGHT),
     today: String? = null, onRouteM: Double = 40.0,
 ) {
     private data class OnRoute(val radar: Radar, val startM: Double, val endM: Double)
@@ -185,12 +221,16 @@ class RadarGuide(
     /** Cuántos radares hay en la ruta. */
     val count: Int get() = ahead.size
 
+    private companion object { const val RED_LIGHT_WARN_M = 200.0 }
+
     /** Con lo que llevas recorrido: el aviso que toca decir ahora (o null) y lo que se enseña. */
     fun update(alongM: Double): Pair<RadarAlert?, RadarAlert?> {
         var say: RadarAlert? = null
         var show: RadarAlert? = null
         ahead.forEachIndexed { i, o ->
             val r = o.radar
+            // Las cámaras de semáforo, en ciudad: a 500 m avisaría demasiado pronto.
+            val warnM = if (r.kind == RadarKind.RED_LIGHT) minOf(warnM, RED_LIGHT_WARN_M) else warnM
             val inside = r.isStretch && o.endM > o.startM && alongM >= o.startM && alongM <= o.endM
             if (inside) {
                 val a = RadarAlert(r.kind, 0.0, r.road, r.maxspeed, inside = true)

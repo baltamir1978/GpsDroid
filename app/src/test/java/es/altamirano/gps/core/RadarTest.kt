@@ -46,6 +46,15 @@ class RadarTest {
         assertEquals(listOf(RadarKind.FIXED, RadarKind.SECTION), old.map { it.kind })
     }
 
+    @Test fun leeLasCamarasDeSemaforoDeOpenStreetMap() {
+        // Una relación «enforcement=traffic_signals» con sus nodos y un nodo suelto, tal cual de Overpass.
+        val list = RadarList.parseOverpassRedLights(resource("semaforos-muestra.json"))
+        assertEquals(2, list.size)
+        assertTrue(list.all { it.kind == RadarKind.RED_LIGHT })
+        // La de la relación trae el sentido (de «from» al semáforo).
+        assertNotNull(list.first().bearing)
+    }
+
     private val lat0 = 40.5
     private val lon0 = -3.7
     private val mLat = 111_195.0
@@ -96,5 +105,12 @@ class RadarTest {
         // A 1 km avisa antes.
         val far = RadarGuide(route, radars, warnM = 1000.0)
         assertNotNull(far.update(2010.0).first)
+    }
+
+    @Test fun camaraDeSemaforoA200Metros() {
+        val route = FollowRoute((0..100).map { at(it * 100.0) })
+        val g = RadarGuide(route, listOf(Radar(RadarKind.RED_LIGHT, at(3000.0).lat, at(3000.0).lon, "", bearing = 0.0)), warnM = 500.0)
+        assertNull(g.update(2600.0).first)                       // a 400 m: todavía no
+        assertEquals("Cámara de semáforo a 190 metros", g.update(2810.0).first!!.spoken())
     }
 }

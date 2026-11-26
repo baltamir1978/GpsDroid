@@ -43,7 +43,8 @@ class RadarSettingsCarScreen(car: CarContext, private val onHeadingUp: (Boolean)
                 save(s.copy(mode = if (s.mode == RadarAlertMode.SOUND) RadarAlertMode.SILENT else RadarAlertMode.SOUND))
             }.build())
             listOf(RadarKind.FIXED to "Fijos y en remolque", RadarKind.SECTION to "Tramos de velocidad media",
-                RadarKind.MOBILE to "Móviles anunciados", RadarKind.MOBILE_STRETCH to "Tramos de radar móvil de la DGT").forEach { (k, label) ->
+                RadarKind.MOBILE to "Móviles anunciados", RadarKind.RED_LIGHT to "Cámaras de semáforo",
+                RadarKind.MOBILE_STRETCH to "Tramos de radar móvil de la DGT").forEach { (k, label) ->
                 list.addItem(Row.Builder().setTitle(label)
                     .setToggle(Toggle.Builder { on -> save(s.copy(kinds = if (on) s.kinds + k else s.kinds - k)) }.setChecked(k in s.kinds).build()).build())
             }

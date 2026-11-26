@@ -30,7 +30,7 @@ data class RadarSettings(
     val enabled: Boolean = true,
     val distanceM: Int = 500,
     val mode: RadarAlertMode = RadarAlertMode.SOUND,
-    val kinds: Set<RadarKind> = setOf(RadarKind.FIXED, RadarKind.SECTION, RadarKind.MOBILE),
+    val kinds: Set<RadarKind> = setOf(RadarKind.FIXED, RadarKind.SECTION, RadarKind.MOBILE, RadarKind.RED_LIGHT),
 ) {
     companion object {
         val DISTANCES = listOf(300, 500, 800, 1000)
@@ -66,7 +66,12 @@ object Radars {
 
     fun settings(context: Context): RadarSettings {
         val p = prefs(context)
-        val kinds = p.getStringSet("radar_kinds", null)?.mapNotNull { runCatching { RadarKind.valueOf(it) }.getOrNull() }?.toSet()
+        var kinds = p.getStringSet("radar_kinds", null)?.mapNotNull { runCatching { RadarKind.valueOf(it) }.getOrNull() }?.toSet()
+        // Las cámaras de semáforo llegaron después (0.17.0): a quien ya había elegido clases, se le añaden una vez.
+        if (kinds != null && !p.getBoolean("radar_kinds_red_light", false)) {
+            kinds = kinds + RadarKind.RED_LIGHT
+            p.edit { putStringSet("radar_kinds", kinds.map { it.name }.toSet()); putBoolean("radar_kinds_red_light", true) }
+        }
         return RadarSettings(
             enabled = p.getBoolean("radar_alerts", true),
             distanceM = p.getInt("radar_distance", 500),
@@ -85,19 +90,27 @@ object Radars {
         _settings.value = s
     }
 
-    /** La lista: la última bajada o, si no hay, la que trae la app. */
+    /** La lista: la última bajada o, si no hay, la que trae la app; más las cámaras de semáforo. */
     fun list(context: Context): List<Radar> = cached ?: run {
-        val f = file(context)
-        val text = if (f.exists()) runCatching { f.readText() }.getOrNull() else null
-        (text ?: context.assets.open("radares.csv").use { it.readBytes().decodeToString() })
-            .let { RadarList.fromCsv(it) }.also { cached = it }
+        fun load(f: File, asset: String) = ((if (f.exists()) runCatching { f.readText() }.getOrNull() else null)
+            ?: context.assets.open(asset).use { it.readBytes().decodeToString() }).let { RadarList.fromCsv(it) }
+        (load(file(context), "radares.csv") + load(redLightFile(context), "semaforos.csv")).also { cached = it }
     }
+
+    /** Las cámaras de semáforo van aparte: ni la DGT ni Radares Anunciados las tienen; salen de OpenStreetMap. */
+    private fun redLightFile(context: Context) = File(context.filesDir, "semaforos.csv")
+    private const val OVERPASS = "https://overpass-api.de/api/interpreter"
+    private const val RED_LIGHT_QUERY = "[out:json][timeout:180];area[\"ISO3166-1\"=\"ES\"][admin_level=2]->.es;" +
+        "(relation[\"type\"=\"enforcement\"][\"enforcement\"=\"traffic_signals\"](area.es);" +
+        "node[\"enforcement\"=\"traffic_signals\"](area.es););out body;>;out skel qt;"
+    private const val RED_LIGHT_REFRESH_MS = 7L * 24 * 3600 * 1000
 
     /** Fecha de la lista que se usa (la bajada) o null si es la que trae la app. */
     fun updatedAt(context: Context): Long? = file(context).takeIf { it.exists() }?.lastModified()
 
     /** Si hace más de un día (o nunca), bajar la lista. Sólo con red y «Usar la red». */
     fun refreshIfOld(context: Context) {
+        refreshRedLightsIfOld(context)
         val f = file(context)
         if (f.exists() && System.currentTimeMillis() - f.lastModified() < REFRESH_MS) return
         if (!Tiles.canUseNetwork(context)) return
@@ -109,7 +122,34 @@ object Radars {
                 ?: return@launch
             val tmp = File(f.parentFile, f.name + ".tmp")
             tmp.writeText(RadarList.toCsv(list)); tmp.renameTo(f)
-            cached = list
+            cached = null   // se vuelve a leer con las cámaras de semáforo
+        }
+    }
+
+    /**
+     * Las cámaras de semáforo, una vez por semana, de Overpass (OpenStreetMap). Sus servidores públicos
+     * se saturan a menudo: si falla, se sigue con las que hay y se prueba la semana siguiente... o
+     * mañana, si ni siquiera había lista bajada.
+     */
+    private fun refreshRedLightsIfOld(context: Context) {
+        val f = redLightFile(context)
+        if (f.exists() && System.currentTimeMillis() - f.lastModified() < RED_LIGHT_REFRESH_MS) return
+        if (!Tiles.canUseNetwork(context)) return
+        io.launch {
+            runCatching {
+                val c = URL(OVERPASS).openConnection() as HttpURLConnection
+                c.connectTimeout = 15_000; c.readTimeout = 200_000
+                c.requestMethod = "POST"; c.doOutput = true
+                c.setRequestProperty("User-Agent", "IGN-GPS (Android)")
+                c.outputStream.use { it.write(("data=" + java.net.URLEncoder.encode(RED_LIGHT_QUERY, "UTF-8")).toByteArray()) }
+                val text = try { if (c.responseCode == 200) c.inputStream.use { it.readBytes().decodeToString() } else null } finally { c.disconnect() }
+                val list = text?.let { RadarList.parseOverpassRedLights(it) }.orEmpty()
+                if (list.size >= 50) {
+                    val tmp = File(f.parentFile, f.name + ".tmp")
+                    tmp.writeText(RadarList.toCsv(list)); tmp.renameTo(f)
+                    cached = null
+                }
+            }.onFailure { Log.w("GpsDroid", "Semáforos: ${it.message}") }
         }
     }
 

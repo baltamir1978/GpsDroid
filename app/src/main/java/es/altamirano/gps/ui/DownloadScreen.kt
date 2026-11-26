@@ -294,6 +294,7 @@ private fun RadarSettingsCard(context: android.content.Context) {
         es.altamirano.gps.core.RadarKind.FIXED to "Fijos y en remolque",
         es.altamirano.gps.core.RadarKind.SECTION to "Tramos de velocidad media",
         es.altamirano.gps.core.RadarKind.MOBILE to "Móviles anunciados (el día que están)",
+        es.altamirano.gps.core.RadarKind.RED_LIGHT to "Cámaras de semáforo en rojo (a 200 m como mucho)",
         es.altamirano.gps.core.RadarKind.MOBILE_STRETCH to "Tramos donde la DGT pone radares móviles (muchos; casi nunca hay uno)",
     ).forEach { (k, label) ->
         Row(verticalAlignment = Alignment.CenterVertically) {

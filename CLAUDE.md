@@ -36,6 +36,22 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.17.0 (26-nov-2026): cámaras de semáforo en rojo.** Bruno: «¿hay avisos de las cámaras de
+semáforo? ¿Se podrían incluir con un icono diferente?».
+- Ni la DGT ni Radares Anunciados las tienen (son municipales). OpenStreetMap, 218 en España
+  (taginfo de Geofabrik: 215 relaciones `type=enforcement` + `enforcement=traffic_signals` y 7
+  nodos): `RadarList.parseOverpassRedLights` toma el miembro `to` (o `force`; si no, `device`) como
+  punto y el rumbo de `from` a ese punto como sentido (205 de 218 lo traen).
+- `assets/semaforos.csv` (sacado de Overpass el 26-nov-2026) aparte de `radares.csv` (el feed diario
+  no lo pisa); `Radars.list` junta los dos. Con red, una vez por semana, Overpass
+  (`overpass-api.de`, POST; sus servidores públicos se saturan: si falla, se sigue con lo que hay).
+- `RadarKind.RED_LIGHT` («Cámara de semáforo»): aviso a 200 m como mucho (en ciudad, 500 sería
+  pronto); casilla propia en los ajustes (móvil y coche), encendida de serie y añadida una vez a quien
+  ya tenía clases elegidas (`radar_kinds_red_light`). En el mapa, un semáforo (rojo, ámbar, verde)
+  sobre una placa blanca, distinto de las señales redondas de los radares.
+- 38 pruebas (muestra real de Overpass en `src/test/resources/semaforos-muestra.json`). **Sin ver
+  en pantalla** el icono (emulador sin ventana).
+
 **0.16.0 (26-nov-2026): en Android Auto, la dirección de la marcha hacia arriba.** Bruno: «que en
 Android Auto la dirección en la que se mueve el coche sea hacia arriba en el mapa».
 - `CarMapRenderer.recenter`: siguiendo la posición y a 2 m/s o más (parado, el rumbo del GPS baila),

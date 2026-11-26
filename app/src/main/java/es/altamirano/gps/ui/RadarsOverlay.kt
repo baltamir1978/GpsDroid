@@ -69,6 +69,7 @@ class RadarsOverlay(private val density: Float) : Overlay() {
             val x = pt.x.toFloat(); val y = pt.y.toFloat()
             // Derecha aunque el mapa esté girado (el coche, con la dirección arriba).
             c.save(); c.rotate(-mapView.mapOrientation, x, y)
+            if (rd.kind == RadarKind.RED_LIGHT) { drawTrafficLight(c, x, y); c.restore(); continue }
             ring.color = color
             ring.strokeWidth = 3.5f * density
             c.drawCircle(x, y, r, fill)
@@ -84,6 +85,22 @@ class RadarsOverlay(private val density: Float) : Overlay() {
                 c.drawCircle(x, y, 2f * density, fill)
             }
             c.restore()
+        }
+    }
+
+    private val housing = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF263238.toInt() }
+    private val lamp = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    /** Las cámaras de semáforo: un semáforo pequeño (rojo, ámbar y verde) sobre una placa blanca. */
+    private fun drawTrafficLight(c: Canvas, x: Float, y: Float) {
+        val d = density
+        c.drawRoundRect(x - 8f * d, y - 13f * d, x + 8f * d, y + 13f * d, 4f * d, 4f * d, fill)
+        ring.color = 0xFF263238.toInt(); ring.strokeWidth = 1.5f * d
+        c.drawRoundRect(x - 8f * d, y - 13f * d, x + 8f * d, y + 13f * d, 4f * d, 4f * d, ring)
+        c.drawRoundRect(x - 5f * d, y - 10.5f * d, x + 5f * d, y + 10.5f * d, 2.5f * d, 2.5f * d, housing)
+        listOf(0xFFE53935.toInt() to -6.5f, 0xFFFFB300.toInt() to 0f, 0xFF43A047.toInt() to 6.5f).forEach { (col, dy) ->
+            lamp.color = col
+            c.drawCircle(x, y + dy * d, 2.6f * d, lamp)
         }
     }
 

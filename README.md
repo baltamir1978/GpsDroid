@@ -53,7 +53,7 @@ ubicación por red ni servicios de Google.
   punto, lo avisa y guía en línea recta. Al empezar a seguir una ruta o un track con conexión, guarda
   los mapas de todo el camino (±500 m) por si más adelante no hay cobertura. En coche avisa de los
   radares que hay en la ruta (fijos, tramos y móviles anunciados de la DGT, Cataluña, Euskadi,
-  ayuntamientos y OpenStreetMap, vía Radares Anunciados), con la distancia, el modo y las clases a
+  ayuntamientos y OpenStreetMap, vía Radares Anunciados) y de las cámaras de semáforo (OpenStreetMap), con la distancia, el modo y las clases a
   elegir; en el mapa salen como señales (con su límite) yendo a más de 20 km/h o con una ruta en coche;
   en Android Auto, además, la velocidad en una esquina y el mapa con la dirección de la marcha hacia
   arriba (o el norte, a elegir).
