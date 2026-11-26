@@ -19,22 +19,32 @@ ubicación por red ni servicios de Google.
   zoom, la escala, y un botón para no usar la red (sólo lo guardado, sin gastar datos). En modo escritorio, la
   rueda del ratón acerca y aleja por donde está el cursor.
 - **Satélites**: el cielo con los satélites a la vista y los que se usan, por constelación, y el
-  fix (coordenadas, altitud, precisión).
+  fix (coordenadas, altitud, precisión). Las altitudes son **sobre el nivel del mar**, como en
+  los mapas (el GPS da la altura sobre el elipsoide, unos 50 m más en España; desde Android 14 se
+  convierte). Los puntos guardados en el mapa toman la altitud del modelo del terreno Copernicus
+  (por la API de Open-Meteo, si se usa la red).
 - **Tracks**: grabar por dónde vas (sigue con la pantalla apagada; se guarda cada minuto),
   importar GPX de otras apps, compartirlos y borrarlos. Al tocar uno se abre su **ficha**:
   distancia, tiempo total y en movimiento, velocidad media y ritmo, subida y bajada, altitud
   máxima y mínima y el **perfil de altitud** (se recorre con el dedo). Desde ella, «Ver en el mapa».
+  **Seguir un track** (o seguirlo al revés), desde su ficha o su menú: te guía por él con lo que
+  queda, el desnivel que falta (↑ ↓) y la hora de llegada al ritmo que llevas; lo andado se pinta
+  más claro. Si te sales, la píldora del mapa se pone roja con la distancia y una flecha hacia el
+  punto más cercano del track, y el móvil **vibra y suena aunque esté en el bolsillo** (también al
+  llegar al final). Antes de llegar al track dice a qué distancia empieza. Se puede seguir un track
+  y grabar a la vez.
   **Copia de todo**: guarda todos los tracks y los puntos en un ZIP donde elijas (los datos viven
   dentro de la app y se perderían al desinstalarla).
 - **Puntos**: mantén pulsado el mapa (o toca el botón verde para tu posición) y guárdalo con un
   nombre. Al tocar uno: **ir hacia él** (arriba en el mapa sale una flecha que apunta hacia el
   punto con la brújula, la distancia y hacia dónde queda: «1,2 km al NE · a tu derecha», y una
   línea discontinua hasta él), renombrarlo, borrarlo o abrirlo en otra app de mapas. En Tracks
-  salen todos, los más cerca primero, y se comparten en un GPX; al importar un GPX con puntos
+  salen todos, los más cerca primero, con su **altitud** y cuánto hay que subir o bajar desde donde
+  estás («Altitud 1.245 m · 230 m más arriba»); se comparten en un GPX; al importar un GPX con puntos
   (`<wpt>`) se añaden.
 - **Android Auto**: el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
-  que se graba, los puntos, guardar un punto donde estás, grabar y la tarjeta del destino (flecha,
-  distancia y a qué mano queda). En GrapheneOS necesita Google Play aislado y Android Auto; y, como
+  que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
+  distancia y a qué mano queda) y el track que se sigue (lo que queda o, fuera de él, hacia dónde volver). En GrapheneOS necesita Google Play aislado y Android Auto; y, como
   la app no viene de Google Play, hay que activar **«Fuentes desconocidas»** en los ajustes de
   desarrollador de Android Auto (se abren tocando varias veces la versión en sus ajustes).
 - **Mapas offline**: bajar una zona (alrededor del centro del mapa o de tu posición, o una sierra

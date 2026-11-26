@@ -12,6 +12,7 @@ import es.altamirano.gps.core.MapStyle
 import es.altamirano.gps.core.TrackPoint
 import es.altamirano.gps.core.Waypoint
 import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.FollowState
 import es.altamirano.gps.data.Prefs
 import es.altamirano.gps.ui.MapScene
 import org.osmdroid.util.GeoPoint
@@ -40,6 +41,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     private var points: List<Waypoint> = emptyList()
     private var target: Waypoint? = null
     private var track: List<TrackPoint> = emptyList()
+    private var following: FollowState? = null
     private var zoom = prefs.view?.third?.coerceAtLeast(13.0) ?: 15.0
 
     var style: MapStyle = prefs.style
@@ -125,8 +127,8 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         return style
     }
 
-    fun update(location: Location?, points: List<Waypoint>, target: Waypoint?, track: List<TrackPoint>) {
-        this.location = location; this.points = points; this.target = target; this.track = track
+    fun update(location: Location?, points: List<Waypoint>, target: Waypoint?, track: List<TrackPoint>, following: FollowState?) {
+        this.location = location; this.points = points; this.target = target; this.track = track; this.following = following
         redraw()
         if (follow) recenter()
     }
@@ -140,6 +142,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         sc.points.target = target
         sc.points.from = location?.takeIf { Gps.isFresh(it) }?.let { it.latitude to it.longitude }
         sc.setTrack(sc.recording, track)
+        sc.setFollow(following, location)
         m.invalidate()
     }
 

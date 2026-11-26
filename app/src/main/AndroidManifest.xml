@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Un toque corto al volver al track que se sigue. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Pedir que no se optimice la batería (para que el GPS no se espacie con la pantalla apagada
          mientras se graba). Google Play lo restringe; esta app no va a Google Play. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
@@ -41,6 +43,8 @@
         </activity>
 
         <service android:name=".data.TrackService" android:exported="false" android:foregroundServiceType="location" />
+        <!-- Seguir un track: avisa al salirse con la pantalla apagada. -->
+        <service android:name=".data.FollowService" android:exported="false" android:foregroundServiceType="location" />
 
         <!-- Android Auto. Ojo: «Fuentes desconocidas» de Android Auto NO basta para las apps de la
              Car App Library (las trata como TEMPLATE): sólo salen si Google Play las avala. Ver CLAUDE.md. -->

@@ -86,10 +86,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import es.altamirano.gps.core.Geo
 import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.altitudeMsl
+import es.altamirano.gps.core.Altitude
 import es.altamirano.gps.data.Prefs
 import es.altamirano.gps.data.Recording
 import es.altamirano.gps.data.Tiles
 import es.altamirano.gps.data.Tracks
+import es.altamirano.gps.data.Following
 import es.altamirano.gps.data.Waypoints
 import es.altamirano.gps.core.Waypoint
 import android.widget.Toast
@@ -122,6 +125,8 @@ fun MapScreen() {
     val rec by Recording.state.collectAsState()
     val opened by Tracks.opened.collectAsState()
     val fit by Tracks.fitRequest.collectAsState()
+    val following by Following.state.collectAsState()
+    val followFit by Following.fitRequest.collectAsState()
 
     LifecycleStartEffect(Unit) {
         Gps.acquire("map")
@@ -230,6 +235,21 @@ fun MapScreen() {
     }
     LaunchedEffect(rec.points) { scene.setTrack(scene.recording, rec.points); mapView.invalidate() }
     LaunchedEffect(opened) { scene.setTrack(scene.opened, opened?.points.orEmpty()); mapView.invalidate() }
+    LaunchedEffect(following, location) { scene.setFollow(following, location); mapView.invalidate() }
+    // Al empezar a seguir: el track entero y tu posición, si estás cerca.
+    LaunchedEffect(followFit) {
+        val pts = following?.route?.points ?: return@LaunchedEffect
+        if (followFit == 0 || pts.isEmpty()) return@LaunchedEffect
+        follow = false
+        mapView.post {
+            val geo = pts.map { GeoPoint(it.lat, it.lon) }.toMutableList()
+            location?.takeIf { Gps.isFresh(it) }?.let { l ->
+                val g = GeoPoint(l.latitude, l.longitude)
+                if (pts.minOf { Geo.distanceM(it.lat, it.lon, g.latitude, g.longitude) } < 5000) geo += g
+            }
+            mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(geo).increaseByScale(1.2f), false)
+        }
+    }
     LaunchedEffect(points, target) { scene.points.points = points; scene.points.target = target; mapView.invalidate() }
     // «Ver en el mapa» desde la lista de puntos.
     LaunchedEffect(focus) {
@@ -272,6 +292,12 @@ fun MapScreen() {
                     else mapView.controller.animateTo(GeoPoint(t.lat, t.lon))
                 }, onClose = { Waypoints.setTarget(null) })
             }
+            following?.let { st ->
+                FollowPill(st, onShow = {
+                    follow = false
+                    mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(st.route.points.map { GeoPoint(it.lat, it.lon) }).increaseByScale(1.2f), true)
+                }, onClose = { Following.stop(context) })
+            }
             AnimatedVisibility(rec.active, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 RecordingPill(rec.lengthM, rec.startedElapsed)
             }
@@ -293,7 +319,7 @@ fun MapScreen() {
                 SmallFloatingActionButton(onClick = {
                     val loc = location
                     if (loc == null || !Gps.isFresh(loc)) Toast.makeText(context, "Todavía no hay posición del GPS", Toast.LENGTH_SHORT).show()
-                    else { newPoint = GeoPoint(loc.latitude, loc.longitude); newPointEle = if (loc.hasAltitude()) loc.altitude else null }
+                    else { newPoint = GeoPoint(loc.latitude, loc.longitude); newPointEle = loc.altitudeMsl() }
                 }, containerColor = MapColors.waypoint, contentColor = Color.White) {
                     Icon(Icons.Filled.AddLocationAlt, "Guardar mi posición como punto")
                 }
@@ -406,7 +432,7 @@ private fun InfoPill(loc: Location?) {
         !Gps.isProviderEnabled() -> "La ubicación está desactivada" to null
         loc == null || !fresh -> "Buscando satélites…" to null
         else -> Geo.formatLatLon(loc.latitude, loc.longitude) to buildList {
-            if (loc.hasAltitude()) add("%.0f m".format(loc.altitude))
+            loc.altitudeMsl()?.let { add(Altitude.format(it)) }
             if (loc.hasAccuracy()) add("±%.0f m".format(loc.accuracy))
             if (loc.hasSpeed() && loc.speed > 0.7f) add("%.1f km/h".format(loc.speed * 3.6f))
         }.joinToString("  ·  ")

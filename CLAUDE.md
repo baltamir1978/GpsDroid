@@ -36,6 +36,52 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.5.0 (26-nov-2026): seguir un track y altitud de los puntos.** Lo pidió Bruno: navegación
+«nivel 1» (guiarse por un GPX, sin calcular rutas) y, en la lista de puntos de Tracks, la altitud.
+- **Seguir un track** (`core/TrackFollow.kt`: `FollowRoute`, `TrackFollower`; `data/Following.kt`:
+  `Following` + `FollowService`; `ui/FollowUi.kt`). Desde la ficha del track («Seguir» / «Al revés»)
+  o su menú ⋮. `FollowRoute` guarda distancia, subida y bajada acumuladas (misma histéresis de 3 m
+  que la ficha) y busca el punto más cercano por proyección en cada tramo (plano local). Con lo que
+  llevabas (`hintM`) sólo mira de 300 m atrás a 1,5 km adelante y elige con un coste: distancia +
+  castigo por ir hacia atrás (más de 30 m) + 0,05 × lo que se aleja de donde ibas; así un ida y
+  vuelta no salta al otro tramo en el giro ni a la vuelta. Sin pista (o a más de 60 m), el track
+  entero: el más cercano, salvo que otra pasada **separada** (más de 300 m de track) esté casi igual
+  de cerca (20 m), y entonces la anterior (un circular al empezar). Cuidado al tocarlo: con un
+  desempate ingenuo, en un tramo recto los puntos vecinos «empatan» y la flecha de volver apuntaba
+  en diagonal (lo cazó la prueba en el emulador; está en `FollowTest`).
+  `TrackFollower`: estados *hacia el track* (aún no has llegado: no avisa), *en el track*, *fuera*
+  (más de 40 m —o la precisión, si es peor— en dos posiciones seguidas; volver: menos de 25 m) y
+  *llegado* (a 30 m del final con el track andado; en un circular no salta al empezar). Posiciones
+  con más de 50 m de error no cuentan. La hora de llegada sale del ritmo desde que entraste en el
+  track (a partir de 2 min y 200 m).
+  `FollowService`: servicio en primer plano tipo `location` (como `TrackService`, independiente:
+  se puede grabar y seguir a la vez), notificación fija con lo que queda y canal aparte de **avisos**
+  (`IMPORTANCE_HIGH`, vibración) para salirse y llegar; al volver, se quita el aviso y un toque corto
+  (`VIBRATE`). En el mapa: píldora (azul; roja fuera, con flecha por la brújula hacia el track;
+  verde al llegar), track en azul intenso con lo andado claro y línea discontinua hasta el track si
+  estás fuera. En Android Auto, tarjeta y track pintado (un destino manda sobre el track).
+- **Altitud de los puntos**: en la lista de Tracks y en la ficha, «Altitud 1.245 m · 230 m más
+  arriba» (menos de 10 m: «a tu altura»; `core/Altitude`). Los guardados con pulsación larga (y los
+  importados sin `<ele>`) la piden a la **API de elevación de Open-Meteo** (Copernicus GLO-90, sin
+  clave, sobre el nivel del mar; `data/Elevation`), sólo con «Usar la red»; si falla, se reintenta
+  al abrir la app o guardar otro punto.
+- **Altitud sobre el nivel del mar en toda la app**: el GPS da altura sobre el elipsoide (en
+  España ~50 m más). `Gps` añade la del geoide con `AltitudeConverter` (Android 14+; la primera
+  vez lee el modelo del disco, en otro hilo; en 15+ `tryAdd…` en el acto) y `Location.altitudeMsl()`
+  la usa en grabar, guardar puntos, la píldora y Satélites (que enseña también la del elipsoide).
+  **Los tracks grabados desde esta versión salen ~50 m más bajos que los de antes**: los de antes
+  estaban mal. En el emulador, 1.000 m de `geo fix` → 946 m.
+- 24 pruebas (6 de seguir: dónde caes y cuánto queda, salirse y volver una vez, lejos al empezar,
+  ida y vuelta, circular, al revés y altitud relativa; 1 de la respuesta de Open-Meteo) y lint sin
+  errores. **Probado en el emulador con la release**: grabar 600 m, «Seguir» desde 300 m antes
+  («Hacia… · 288 m al N · de frente»), en el track («Quedan 300 m · ↑ 30 m ↓ 0 m»), fuera («95 m al
+  O · a tu izquierda» y la notificación «Te has salido del track»), de vuelta y «Has llegado» con su
+  aviso; puntos con altitud. El emulador se cuelga a veces en el servicio de ubicación del propio
+  sistema (`GnssNative.stop` bloqueado en `system_server`: la app da ANR esperando en
+  `unregisterGnssStatusCallback`); no es de la app, se reinicia con `-wipe-data`. **Sin probar en el
+  móvil**: todo lo anterior con GPS de verdad, los avisos con la pantalla apagada, la hora de llegada
+  y Android Auto.
+
 **0.4.8 (26-nov-2026): copia de todo.** Bruno no quiere perder los tracks del móvil, que viven en
 `filesDir` (se borran si se desinstala la app). En Tracks, junto a Grabar e Importar (en un
 `FlowRow`: no caben los tres en una fila), «Copia de todo» guarda un ZIP donde elija el usuario
@@ -226,3 +272,9 @@ capas), escala y atribución; descarga de zonas. Lo demás (grabar, importar, sa
 
 
 Ideas, si hicieran falta: pintar en el mapa el punto marcado en el perfil; en el coche, mapa orientado hacia donde vas.
+
+**Por desarrollar (Bruno, 26-nov-2026): navegación con rutas calculadas.** Con **BRouter** (app
+aparte, libre, rutas sin conexión con datos de OpenStreetMap por zonas; se le piden por su servicio
+AIDL, como hacen OsmAnd y Locus): a pie, bici o coche, indicaciones giro a giro leídas en español
+(`TextToSpeech`) y, en Android Auto, `NavigationTemplate` con la maniobra. Los servicios en línea
+(openrouteservice, GraphHopper) piden clave, tienen tope y no van sin cobertura.

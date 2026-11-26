@@ -31,6 +31,10 @@ import es.altamirano.gps.R
 import es.altamirano.gps.core.Direction
 import es.altamirano.gps.core.Geo
 import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.FollowState
+import es.altamirano.gps.data.Following
+import es.altamirano.gps.core.FollowStatus
+import es.altamirano.gps.data.altitudeMsl
 import es.altamirano.gps.data.Recording
 import es.altamirano.gps.data.Waypoints
 import es.altamirano.gps.ui.MapColors
@@ -69,10 +73,10 @@ class MapCarScreen(car: CarContext) : Screen(car) {
         })
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                combine(Gps.location, Waypoints.list, Waypoints.target, Recording.state) { loc, pts, t, rec -> Quad(loc, pts, t, rec) }
-                    .collect { (loc, pts, t, rec) ->
-                        renderer.update(loc, pts, t, rec.points)
-                        val newCard = cardFor(loc, t, rec)
+                combine(Gps.location, Waypoints.list, Waypoints.target, Recording.state, Following.state) { loc, pts, t, rec, fol -> Five(loc, pts, t, rec, fol) }
+                    .collect { (loc, pts, t, rec, fol) ->
+                        renderer.update(loc, pts, t, rec.points, fol)
+                        val newCard = cardFor(loc, t, rec, fol)
                         if (newCard != card || rec.active != recording) {
                             // Como mucho cada 2 s (salvo al cambiar de destino o de grabar).
                             val now = SystemClock.elapsedRealtime()
@@ -87,11 +91,14 @@ class MapCarScreen(car: CarContext) : Screen(car) {
         }
     }
 
-    private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+    private data class Five<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
 
-    private fun cardFor(loc: android.location.Location?, t: es.altamirano.gps.core.Waypoint?, rec: es.altamirano.gps.data.RecordingState): Card? {
+    private fun cardFor(loc: android.location.Location?, t: es.altamirano.gps.core.Waypoint?, rec: es.altamirano.gps.data.RecordingState,
+                        fol: FollowState?): Card? {
         val fresh = loc?.takeIf { Gps.isFresh(it) }
         val recText = if (rec.active) "Grabando · ${Geo.formatDistance(rec.lengthM)}" else null
+        // Un destino manda sobre el track (se ha elegido después, desde el coche o el móvil).
+        if (t == null && fol != null) return followCard(fol, fresh, recText)
         if (t == null) return recText?.let { Card(it, if (fresh == null) "Sin señal GPS" else "Sin destino", null) }
         if (fresh == null) return Card(t.name, listOfNotNull("Sin señal GPS", recText).joinToString(" · "), null)
         val d = Geo.distanceM(fresh.latitude, fresh.longitude, t.lat, t.lon)
@@ -107,6 +114,22 @@ class MapCarScreen(car: CarContext) : Screen(car) {
         }
         val arrow = ((Direction.norm(b - (heading ?: 0f)) / 15).roundToInt() * 15) % 360
         return Card(t.name, listOfNotNull(text, recText).joinToString(" · "), arrow.takeIf { d >= 25 })
+    }
+
+    /** El track que se sigue: lo que queda o, fuera de él, hacia dónde volver (con flecha). */
+    private fun followCard(fol: FollowState, fresh: android.location.Location?, recText: String?): Card {
+        val f = fol.fix
+        if (fresh == null || f == null) return Card(fol.name, listOfNotNull("Sin señal GPS", recText).joinToString(" · "), null)
+        val away = f.status == FollowStatus.OFF_TRACK || f.status == FollowStatus.APPROACHING
+        val title = if (f.status == FollowStatus.OFF_TRACK) "Fuera del track" else fol.name
+        // Cifras redondeadas (a 100 m lo que queda, a 10 m lo de volver) para no rehacer la tarjeta a cada paso.
+        val text = if (away) {
+            val d = (f.match.offM / 10).roundToInt() * 10.0
+            "${Geo.formatDistance(d)} al ${Direction.cardinal(f.bearingToTrack)}"
+        } else Following.summary(fol.copy(fix = f.copy(remainingM = (f.remainingM / 100).roundToInt() * 100.0)))
+        val heading = fresh.travelHeading(2f)
+        val arrow = if (away) ((Direction.norm(f.bearingToTrack - (heading ?: 0f)) / 15).roundToInt() * 15) % 360 else null
+        return Card(title, listOfNotNull(text, recText).joinToString(" · "), arrow)
     }
 
     override fun onGetTemplate(): Template {
@@ -146,7 +169,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
     private fun savePoint() {
         val loc = Gps.location.value?.takeIf { Gps.isFresh(it) }
         if (loc == null) { CarToast.makeText(carContext, "Sin señal GPS", CarToast.LENGTH_SHORT).show(); return }
-        val w = Waypoints.add(Waypoints.nextName(), loc.latitude, loc.longitude, if (loc.hasAltitude()) loc.altitude else null)
+        val w = Waypoints.add(Waypoints.nextName(), loc.latitude, loc.longitude, loc.altitudeMsl())
         CarToast.makeText(carContext, "Guardado «${w.name}» (se renombra en el móvil)", CarToast.LENGTH_LONG).show()
     }
 

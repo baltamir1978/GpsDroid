@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,7 +70,7 @@ import kotlin.math.max
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TrackDetailSheet(info: TrackInfo, onDismiss: () -> Unit, onShowOnMap: () -> Unit, onShare: () -> Unit) {
+fun TrackDetailSheet(info: TrackInfo, onDismiss: () -> Unit, onShowOnMap: () -> Unit, onShare: () -> Unit, onFollow: (reversed: Boolean) -> Unit) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val stats by produceState<TrackStats?>(null, info.file, info.modified) {
         value = withContext(Dispatchers.IO) {
@@ -110,10 +114,18 @@ fun TrackDetailSheet(info: TrackInfo, onDismiss: () -> Unit, onShowOnMap: () -> 
                 if (s.durationS == null) Text("Sin horas en el GPX (una ruta planificada, quizá): no hay tiempos.", fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onShowOnMap, enabled = info.points > 0) { Icon(Icons.Filled.Map, null); Text("  Ver en el mapa") }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (info.points > 1) {
+                    Button(onClick = { onFollow(false) }, colors = ButtonDefaults.buttonColors(containerColor = MapColors.follow, contentColor = Color.White)) {
+                        Icon(Icons.Filled.Navigation, null); Text("  Seguir", fontWeight = FontWeight.SemiBold)
+                    }
+                    OutlinedButton(onClick = { onFollow(true) }) { Icon(Icons.Filled.SwapVert, null); Text("  Al revés") }
+                }
+                OutlinedButton(onClick = onShowOnMap, enabled = info.points > 0) { Icon(Icons.Filled.Map, null); Text("  Ver en el mapa") }
                 OutlinedButton(onClick = onShare) { Icon(Icons.Filled.Share, null); Text("  Compartir") }
             }
+            if (info.points > 1) Text("Seguir: te guía por el track con lo que queda, el desnivel y la hora de llegada, y avisa si te sales (también con la pantalla apagada).",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

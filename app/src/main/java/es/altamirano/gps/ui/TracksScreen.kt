@@ -80,6 +80,9 @@ import es.altamirano.gps.data.Recording
 import es.altamirano.gps.data.TrackInfo
 import es.altamirano.gps.data.Tracks
 import es.altamirano.gps.data.Waypoints
+import es.altamirano.gps.data.Following
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.SwapVert
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.core.Waypoint
 import androidx.compose.foundation.lazy.items
@@ -122,6 +125,20 @@ fun TracksScreen() {
     LifecycleResumeEffect(Unit) { batteryOptimized = isBatteryOptimized(context); onPauseOrDispose {} }
 
     val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Recording.start(context) }
+    // Seguir un track: los avisos van por notificación, así que primero el permiso (si no se da,
+    // se sigue igual: la píldora del mapa lo dice todo, sólo faltan los avisos con la pantalla apagada).
+    var pendingFollow by remember { mutableStateOf<Pair<TrackInfo, Boolean>?>(null) }
+    val followNow: (TrackInfo, Boolean) -> Unit = { t, reversed ->
+        Following.start(context, t.file, reversed)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
+    val followPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        pendingFollow?.let { (t, r) -> followNow(t, r) }; pendingFollow = null
+    }
+    val follow: (TrackInfo, Boolean) -> Unit = { t, reversed ->
+        if (Build.VERSION.SDK_INT >= 33) { pendingFollow = t to reversed; followPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
+        else followNow(t, reversed)
+    }
+    val following by Following.state.collectAsState()
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) Tracks.import(context, uri)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
@@ -192,8 +209,8 @@ fun TracksScreen() {
         }
         itemsIndexed(list, key = { _, t -> t.file.name }) { i, t ->
             val recordingThis = rec.active && rec.file == t.file
-            TrackRow(Modifier.padding(horizontal = side), i, t, recordingThis, onOpen = { details = t }, onMap = { Tracks.open(t.file) },
-                onDelete = { toDelete = t }, onShare = { share(t) })
+            TrackRow(Modifier.padding(horizontal = side), i, t, recordingThis, following?.file == t.file, onOpen = { details = t }, onMap = { Tracks.open(t.file) },
+                onDelete = { toDelete = t }, onShare = { share(t) }, onFollow = { r -> follow(t, r) })
         }
         item {
             Row(Modifier.padding(start = side, end = side - 8.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -235,7 +252,8 @@ fun TracksScreen() {
     }
 
     details?.let { t ->
-        TrackDetailSheet(t, onDismiss = { details = null }, onShowOnMap = { details = null; Tracks.open(t.file) }, onShare = { share(t) })
+        TrackDetailSheet(t, onDismiss = { details = null }, onShowOnMap = { details = null; Tracks.open(t.file) }, onShare = { share(t) },
+            onFollow = { r -> details = null; follow(t, r) })
     }
 }
 
@@ -257,7 +275,8 @@ private fun requestNoBatteryOptimization(context: Context) {
 private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm")
 
 @Composable
-private fun TrackRow(modifier: Modifier, index: Int, t: TrackInfo, recording: Boolean, onOpen: () -> Unit, onMap: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit) {
+private fun TrackRow(modifier: Modifier, index: Int, t: TrackInfo, recording: Boolean, followed: Boolean, onOpen: () -> Unit, onMap: () -> Unit,
+                     onDelete: () -> Unit, onShare: () -> Unit, onFollow: (reversed: Boolean) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     // Cada fila con un color del tema para el icono, por turnos: más vivo que una lista gris.
     val c = MaterialTheme.colorScheme
@@ -276,13 +295,24 @@ private fun TrackRow(modifier: Modifier, index: Int, t: TrackInfo, recording: Bo
                     add("${t.points} puntos")
                 }
                 Text(parts.joinToString(" · "), fontSize = 13.sp)
-                Text(if (recording) "Grabándose ahora" else dateFormat.format(Instant.ofEpochMilli(t.modified).atZone(ZoneId.systemDefault())),
-                    fontSize = 12.sp, color = if (recording) MapColors.recording else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(when {
+                    recording -> "Grabándose ahora"
+                    followed -> "Siguiéndolo ahora"
+                    else -> dateFormat.format(Instant.ofEpochMilli(t.modified).atZone(ZoneId.systemDefault()))
+                }, fontSize = 12.sp, color = when {
+                    recording -> MapColors.recording
+                    followed -> MapColors.follow
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                })
             }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Más") }
                 DropdownMenu(menu, onDismissRequest = { menu = false }) {
                     if (t.points > 0) DropdownMenuItem(text = { Text("Ver en el mapa") }, leadingIcon = { Icon(Icons.Filled.Map, null) }, onClick = { menu = false; onMap() })
+                    if (t.points > 1 && !recording) {
+                        DropdownMenuItem(text = { Text("Seguir este track") }, leadingIcon = { Icon(Icons.Filled.Navigation, null) }, onClick = { menu = false; onFollow(false) })
+                        DropdownMenuItem(text = { Text("Seguirlo al revés") }, leadingIcon = { Icon(Icons.Filled.SwapVert, null) }, onClick = { menu = false; onFollow(true) })
+                    }
                     DropdownMenuItem(text = { Text("Compartir GPX") }, leadingIcon = { Icon(Icons.Filled.Share, null) }, onClick = { menu = false; onShare() })
                     if (!recording) DropdownMenuItem(text = { Text("Borrar") }, leadingIcon = { Icon(Icons.Filled.Delete, null) }, onClick = { menu = false; onDelete() })
                 }

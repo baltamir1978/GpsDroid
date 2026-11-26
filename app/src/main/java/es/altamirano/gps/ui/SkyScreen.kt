@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import es.altamirano.gps.core.Geo
 import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.altitudeMsl
+import es.altamirano.gps.core.Altitude
 import es.altamirano.gps.data.Satellite
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -160,8 +162,12 @@ private fun FixCard(sky: List<Satellite>, loc: android.location.Location?, @Supp
         add("Satélites" to "$used usados de ${sky.size} a la vista")
         if (loc != null) {
             add("Posición" to Geo.formatLatLon(loc.latitude, loc.longitude) + if (fresh) "" else " (última)")
-            if (loc.hasAltitude()) add("Altitud" to "%.0f m".format(loc.altitude) +
-                if (loc.hasVerticalAccuracy()) "  ±%.0f m".format(loc.verticalAccuracyMeters) else "")
+            loc.altitudeMsl()?.let { msl ->
+                add("Altitud" to Altitude.format(msl) +
+                    if (loc.hasVerticalAccuracy()) "  ±%.0f m".format(loc.verticalAccuracyMeters) else "")
+                // La del GPS tal cual, por si se compara con otro aparato que no la convierte.
+                if (msl != loc.altitude) add("Sobre el elipsoide" to Altitude.format(loc.altitude))
+            }
             if (loc.hasAccuracy()) add("Precisión" to "±%.0f m".format(loc.accuracy))
             if (loc.hasSpeed()) add("Velocidad" to "%.1f km/h".format(loc.speed * 3.6f))
             if (loc.hasBearing() && loc.hasSpeed() && loc.speed > 0.7f) add("Rumbo" to "%.0f°".format(loc.bearing))

@@ -46,4 +46,8 @@ object MapColors {
     val stale = Color(0xFF9E9E9E)
     val waypoint = Color(0xFF00897B)
     val target = Color(0xFFF57C00)
+    /** El track que se sigue: azul intenso, que no se confunda con el abierto (morado) ni con tu posición. */
+    val follow = Color(0xFF3949AB)
+    val followDone = Color(0xFF9FA8DA)
+    val offTrack = Color(0xFFD81B60)
 }

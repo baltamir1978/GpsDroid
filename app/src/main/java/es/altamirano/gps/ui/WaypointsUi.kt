@@ -60,6 +60,8 @@ import es.altamirano.gps.core.Direction
 import es.altamirano.gps.core.Geo
 import es.altamirano.gps.core.Waypoint
 import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.altitudeMsl
+import es.altamirano.gps.core.Altitude
 import es.altamirano.gps.data.Waypoints
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -70,6 +72,16 @@ data class Away(val distanceM: Double, val bearing: Double)
 fun away(loc: Location?, w: Waypoint): Away? {
     if (loc == null || !Gps.isFresh(loc)) return null
     return Away(Geo.distanceM(loc.latitude, loc.longitude, w.lat, w.lon), Direction.bearingDeg(loc.latitude, loc.longitude, w.lat, w.lon))
+}
+
+/**
+ * "1.245 m · 230 m más arriba": la altitud del punto y, con posición de ahora, cuánto hay que subir o
+ * bajar. null si el punto no tiene altitud (todavía: se pide a la red al guardarlo).
+ */
+fun altitudeLine(w: Waypoint, loc: Location?): String? {
+    val e = w.ele ?: return null
+    val mine = loc?.takeIf { Gps.isFresh(it) }?.altitudeMsl()
+    return listOfNotNull(Altitude.format(e), Altitude.relative(e, mine)).joinToString(" · ")
 }
 
 /**
@@ -132,7 +144,7 @@ fun WaypointSheet(w: Waypoint, loc: Location?, isTarget: Boolean, onDismiss: () 
                     contentAlignment = Alignment.Center) { Icon(Icons.Filled.Place, null, tint = Color.White) }
                 Column(Modifier.padding(start = 14.dp)) {
                     Text(w.name, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Text(Geo.formatLatLon(w.lat, w.lon) + (w.ele?.let { "  ·  %.0f m".format(Locale.ROOT, it) } ?: ""),
+                    Text(Geo.formatLatLon(w.lat, w.lon) + (w.ele?.let { "  ·  " + Altitude.format(it) } ?: ""),
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -141,6 +153,10 @@ fun WaypointSheet(w: Waypoint, loc: Location?, isTarget: Boolean, onDismiss: () 
                 Text("  al ${Direction.cardinalName(a.bearing)} · ${a.bearing.roundToInt() % 360}°", fontSize = 16.sp,
                     modifier = Modifier.padding(bottom = 6.dp))
             } else Text("Sin posición del GPS: no sé a qué distancia queda.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            w.ele?.let { e ->
+                val rel = Altitude.relative(e, loc?.takeIf { Gps.isFresh(it) }?.altitudeMsl())
+                Text("Altitud ${Altitude.format(e)}" + (rel?.let { " · $it" } ?: ""), fontSize = 16.sp)
+            }
 
             Button(onClick = { Waypoints.setTarget(if (isTarget) null else w); onDismiss() }, Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MapColors.target, contentColor = Color.White)) {
@@ -182,6 +198,7 @@ fun WaypointRow(modifier: Modifier, w: Waypoint, loc: Location?, isTarget: Boole
             Column(Modifier.weight(1f).padding(start = 14.dp)) {
                 Text(w.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(a?.let { Direction.describe(it.distanceM, it.bearing) } ?: Geo.formatLatLon(w.lat, w.lon), fontSize = 13.sp)
+                altitudeLine(w, loc)?.let { Text("Altitud $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (isTarget) Text("Destino", fontSize = 12.sp, color = MapColors.target, fontWeight = FontWeight.SemiBold)
             }
         }

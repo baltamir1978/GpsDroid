@@ -8,6 +8,9 @@ import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.location.altitude.AltitudeConverter
+import androidx.annotation.RequiresApi
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -15,6 +18,20 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import java.util.concurrent.Executors
+
+/**
+ * La altitud sobre el nivel del mar, la de los mapas. El GPS da la altura sobre el elipsoide WGS84,
+ * que en España sale unos 50 m más alta (lo que el geoide queda por encima del elipsoide); desde
+ * Android 14 el sistema sabe convertirla ([Gps] la añade a cada posición). Sin esa conversión, la
+ * del GPS tal cual.
+ */
+fun Location.altitudeMsl(): Double? = when {
+    Build.VERSION.SDK_INT >= 34 && hasMslAltitude() -> mslAltitudeMeters
+    hasAltitude() -> altitude
+    else -> null
+}
 
 /** Un satélite tal como lo da `GnssStatus`. */
 data class Satellite(
@@ -57,7 +74,10 @@ object Gps {
     fun isFresh(loc: Location?) = loc != null && SystemClock.elapsedRealtimeNanos() - loc.elapsedRealtimeNanos < 10_000_000_000L
 
     private val listener = object : LocationListener {
-        override fun onLocationChanged(location: Location) { _location.value = location }
+        override fun onLocationChanged(location: Location) {
+            if (Build.VERSION.SDK_INT >= 34 && location.hasAltitude() && !location.hasMslAltitude()) addMsl(location)
+            else publish(location)
+        }
         override fun onProviderDisabled(provider: String) {}
         override fun onProviderEnabled(provider: String) {}
     }
@@ -72,6 +92,30 @@ object Gps {
             }
         }
         override fun onStopped() { _sky.value = emptyList() }
+    }
+
+    private val converter by lazy { if (Build.VERSION.SDK_INT >= 34) AltitudeConverter() else null }
+    private val altitudeThread by lazy { Executors.newSingleThreadExecutor() }
+
+    /**
+     * La conversión lee del disco el modelo del geoide la primera vez (puede tardar): se hace fuera
+     * del hilo principal. Desde Android 15, ya cargado, se puede hacer en el acto.
+     */
+    @RequiresApi(34)
+    private fun addMsl(location: Location) {
+        val c = converter as AltitudeConverter
+        if (Build.VERSION.SDK_INT >= 35 && runCatching { c.tryAddMslAltitudeToLocation(location) }.getOrDefault(false)) {
+            publish(location); return
+        }
+        altitudeThread.execute {
+            runCatching { c.addMslAltitudeToLocation(app, location) }
+            publish(location)
+        }
+    }
+
+    /** Sin pisar una posición más nueva con una vieja (la convertida en el otro hilo puede llegar tarde). */
+    private fun publish(location: Location) {
+        _location.update { cur -> if (cur != null && cur.elapsedRealtimeNanos > location.elapsedRealtimeNanos) cur else location }
     }
 
     @Synchronized fun acquire(owner: String) { users += owner; update() }

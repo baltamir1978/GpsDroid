@@ -114,7 +114,7 @@ class TrackService : Service() {
             Gps.location.filterNotNull().collect { loc ->
                 if (loc.elapsedRealtimeNanos < since) return@collect
                 val p = TrackPoint(loc.latitude, loc.longitude,
-                    if (loc.hasAltitude()) loc.altitude else null,
+                    loc.altitudeMsl(),
                     Instant.ofEpochMilli(loc.time).truncatedTo(ChronoUnit.SECONDS).toString())
                 val acc = if (loc.hasAccuracy()) loc.accuracy.toDouble() else null
                 if (recorder.offer(p, acc, loc.elapsedRealtimeNanos / 1e9)) {

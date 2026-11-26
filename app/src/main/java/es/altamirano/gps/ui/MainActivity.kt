@@ -49,6 +49,7 @@ import es.altamirano.common.ui.isWide
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.data.Tracks
 import es.altamirano.gps.data.Waypoints
+import es.altamirano.gps.data.Following
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     MAP("Mapa", Icons.Filled.Map),
@@ -77,6 +78,8 @@ private fun App() {
     // Abrir un track lleva al mapa.
     val fit by Tracks.fitRequest.collectAsState()
     LaunchedEffect(fit) { if (fit > 0) tab = Tab.MAP.ordinal }
+    val followFit by Following.fitRequest.collectAsState()
+    LaunchedEffect(followFit) { if (followFit > 0) tab = Tab.MAP.ordinal }
     val focus by Waypoints.focus.collectAsState()
     LaunchedEffect(focus) { if (focus.n > 0) tab = Tab.MAP.ordinal }
 

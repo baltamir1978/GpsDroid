@@ -5,6 +5,12 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import es.altamirano.gps.core.Waypoint
 import es.altamirano.gps.core.WaypointGpx
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,6 +41,9 @@ object Waypoints {
     private val _focus = MutableStateFlow(Focus())
     val focus: StateFlow<Focus> = _focus.asStateFlow()
 
+    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val fillLock = Mutex()
+
     fun init(context: Context) {
         file = File(context.filesDir, "puntos/puntos.gpx").apply { parentFile?.mkdirs() }
         prefs = context.getSharedPreferences("gps", Context.MODE_PRIVATE)
@@ -43,6 +52,29 @@ object Waypoints {
         _list.value = loaded
         // El destino se recuerda por sus coordenadas (los id no pasan de una sesión a otra).
         prefs.getString("target", null)?.let { key -> _target.value = loaded.firstOrNull { key(it) == key } }
+        fillElevations()
+    }
+
+    /**
+     * Pone altitud a los puntos que no la tienen (guardados con una pulsación larga o importados sin
+     * ella) preguntando a [Elevation]. Sólo con «Usar la red» encendido; si no hay red, se vuelve a
+     * intentar al abrir la app o al guardar otro punto.
+     */
+    fun fillElevations() {
+        if (!prefs.getBoolean("online", true)) return
+        if (_list.value.none { it.ele == null }) return
+        io.launch {
+            fillLock.withLock {
+                val missing = _list.value.filter { it.ele == null }
+                if (missing.isEmpty()) return@withLock
+                val eles = Elevation.fetch(missing.map { it.lat to it.lon }) ?: return@withLock
+                val byId = missing.map { it.id }.zip(eles).toMap()
+                synchronized(this@Waypoints) {
+                    save(_list.value.map { w -> if (w.ele == null) byId[w.id]?.let { w.copy(ele = it) } ?: w else w })
+                    _target.value?.let { t -> _target.value = _list.value.firstOrNull { it.id == t.id } ?: t }
+                }
+            }
+        }
     }
 
     fun file(): File = file
@@ -51,27 +83,29 @@ object Waypoints {
 
     fun nextName() = WaypointGpx.nextName(_list.value)
 
-    fun add(name: String, lat: Double, lon: Double, ele: Double? = null): Waypoint {
+    @Synchronized fun add(name: String, lat: Double, lon: Double, ele: Double? = null): Waypoint {
         val w = Waypoint(nextId++, name.trim().ifEmpty { nextName() }, lat, lon, ele,
             Instant.now().truncatedTo(ChronoUnit.SECONDS).toString())
         save(_list.value + w)
+        if (ele == null) fillElevations()
         return w
     }
 
     /** Los `<wpt>` de un GPX importado. Devuelve cuántos. */
-    fun addAll(points: List<Waypoint>): Int {
+    @Synchronized fun addAll(points: List<Waypoint>): Int {
         if (points.isEmpty()) return 0
         save(_list.value + points.map { it.copy(id = nextId++) })
+        fillElevations()
         return points.size
     }
 
-    fun rename(w: Waypoint, name: String) {
+    @Synchronized fun rename(w: Waypoint, name: String) {
         val n = name.trim().ifEmpty { return }
         save(_list.value.map { if (it.id == w.id) it.copy(name = n) else it })
         if (_target.value?.id == w.id) _target.value = _target.value?.copy(name = n)
     }
 
-    fun delete(w: Waypoint) {
+    @Synchronized fun delete(w: Waypoint) {
         save(_list.value.filter { it.id != w.id })
         if (_target.value?.id == w.id) setTarget(null)
     }
@@ -83,7 +117,7 @@ object Waypoints {
 
     fun show(w: Waypoint) { _focus.value = Focus(_focus.value.n + 1, w) }
 
-    private fun save(points: List<Waypoint>) {
+    @Synchronized private fun save(points: List<Waypoint>) {
         _list.value = points
         val tmp = File(file.parentFile, file.name + ".tmp")
         runCatching { tmp.writeText(WaypointGpx.write(points)); tmp.renameTo(file) }

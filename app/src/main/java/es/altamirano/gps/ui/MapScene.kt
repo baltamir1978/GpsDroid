@@ -15,6 +15,9 @@ import es.altamirano.gps.core.MapStyle
 import es.altamirano.gps.core.TrackPoint
 import es.altamirano.gps.core.Waypoint
 import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.FollowState
+import es.altamirano.gps.core.FollowRoute
+import es.altamirano.gps.core.FollowStatus
 import es.altamirano.gps.data.Tiles
 import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.util.GeoPoint
@@ -38,11 +41,21 @@ class MapScene(context: Context, density: Float) {
     }
     val opened = trackLine(MapColors.opened.toArgb(), 5f * density)
     val recording = trackLine(MapColors.recording.toArgb(), 4f * density)
+    // El track que se sigue: lo que queda, fuerte; lo andado, claro; y, si estás fuera, una línea
+    // discontinua hasta el punto más cercano del track (en línea recta: por dónde volver).
+    val followDone = trackLine(MapColors.followDone.toArgb(), 6f * density)
+    val followAhead = trackLine(MapColors.follow.toArgb(), 6f * density)
+    val followGap = trackLine(MapColors.offTrack.toArgb(), 3f * density).apply {
+        outlinePaint.pathEffect = DashPathEffect(floatArrayOf(10f * density, 7f * density), 0f)
+    }
     val points = WaypointsOverlay(density)
     val position = PositionOverlay(density)
 
     fun install(map: MapView) {
         map.overlays += opened
+        map.overlays += followDone
+        map.overlays += followAhead
+        map.overlays += followGap
         map.overlays += recording
         map.overlays += points
         map.overlays += position
@@ -68,6 +81,32 @@ class MapScene(context: Context, density: Float) {
     }
 
     fun setTrack(line: Polyline, pts: List<TrackPoint>) = line.setPoints(pts.map { GeoPoint(it.lat, it.lon) })
+
+    private var followed: FollowRoute? = null
+    private var followedSplit = -1
+
+    /** El track que se sigue, partido por donde vas. Sólo se rehace al pasar de tramo o cambiar de track. */
+    fun setFollow(st: FollowState?, location: Location?) {
+        val route = st?.route
+        val fix = st?.fix
+        if (route == null) {
+            followed = null; followedSplit = -1
+            followDone.setPoints(emptyList()); followAhead.setPoints(emptyList()); followGap.setPoints(emptyList())
+            return
+        }
+        // Mientras no has llegado al track, todo está por andar.
+        val split = if (fix == null || fix.status == FollowStatus.APPROACHING) 0 else fix.match.segment + 1
+        if (route !== followed || split != followedSplit) {
+            followed = route; followedSplit = split
+            val all = route.points.map { GeoPoint(it.lat, it.lon) }
+            val here = fix?.takeIf { split > 0 }?.let { GeoPoint(it.match.lat, it.match.lon) }
+            followDone.setPoints(if (here == null) emptyList() else all.take(split) + here)
+            followAhead.setPoints(if (here == null) all else listOf(here) + all.drop(split))
+        }
+        val loc = location?.takeIf { Gps.isFresh(it) }
+        val away = fix != null && loc != null && fix.status in setOf(FollowStatus.OFF_TRACK, FollowStatus.APPROACHING)
+        followGap.setPoints(if (away) listOf(GeoPoint(loc!!.latitude, loc.longitude), GeoPoint(fix!!.match.lat, fix.match.lon)) else emptyList())
+    }
 
     /** Si no está en el mapa, `MapView.onDetach` no lo suelta. */
     fun release(map: MapView) {
