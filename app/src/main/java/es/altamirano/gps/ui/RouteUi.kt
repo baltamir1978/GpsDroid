@@ -62,6 +62,8 @@ import es.altamirano.gps.data.RoutePreviewState
 import es.altamirano.gps.core.Geo
 import es.altamirano.common.ui.glass
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.filled.AltRoute
@@ -169,12 +171,16 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
                 Text("Por caminos y carreteras, sin conexión (datos de OpenStreetMap). ¿Cómo vas?", fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val last = lastMode(context)
+                // Botones grandes, uno por modo; el último que se usó, relleno (lo normal es repetirlo).
                 TravelMode.entries.forEach { m ->
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { askMode = false; calculate(m) }
-                        .padding(horizontal = 8.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(modeIcon(m), null, tint = if (m == last) MapColors.follow else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("   ${m.label}", fontSize = 17.sp, fontWeight = if (m == last) FontWeight.Bold else FontWeight.Normal)
+                    val onClick = { askMode = false; calculate(m) }
+                    val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+                        Icon(modeIcon(m), null, Modifier.size(24.dp))
+                        Text("   ${m.label}", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                     }
+                    val mod = Modifier.fillMaxWidth().height(56.dp)
+                    if (m == last) Button(onClick = onClick, mod, colors = ButtonDefaults.buttonColors(containerColor = MapColors.follow, contentColor = Color.White), content = content)
+                    else FilledTonalButton(onClick = onClick, mod, content = content)
                 }
             }
         },
