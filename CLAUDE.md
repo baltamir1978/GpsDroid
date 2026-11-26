@@ -36,6 +36,12 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.4.7 (26-nov-2026): sin la comprobación de instalador de Play.** Mismo código que la 0.4.6.
+Play activa por defecto la «protección automática» (mete en lo que reparte una comprobación del
+instalador); Bruno pidió quitarla en todas («desactívalo»): depende de los servicios de Play y en
+GrapheneOS puede fallar. Se desactivó en Play Console y hacía falta publicar otra versión para que
+la que se reparte deje de llevarla.
+
 **0.4.6 (26-nov-2026): las teselas ya no tapan el riel.** Bruno, con la 0.4.5: «ya funciona en
 modo escritorio; aparece la barra en la parte lateral, pero se cubre con las teselas». Compose no
 recorta un `AndroidView` a su hueco, y el `MapView` (más aún estirado por `WheelZoom`) pintaba por
