@@ -54,7 +54,8 @@ ubicación por red ni servicios de Google.
   los mapas de todo el camino (±500 m) por si más adelante no hay cobertura. En coche avisa de los
   radares que hay en la ruta (fijos, tramos y móviles anunciados de la DGT, Cataluña, Euskadi,
   ayuntamientos y OpenStreetMap, vía Radares Anunciados), con la distancia, el modo y las clases a
-  elegir; en Android Auto, además, la velocidad en una esquina.
+  elegir; en el mapa salen como señales (con su límite) yendo a más de 20 km/h o con una ruta en coche;
+  en Android Auto, además, la velocidad en una esquina.
 - **Android Auto**: el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
   que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
   distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador. En GrapheneOS necesita Google Play aislado y Android Auto; y, como

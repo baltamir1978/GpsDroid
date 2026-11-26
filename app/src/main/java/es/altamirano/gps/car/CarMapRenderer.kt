@@ -90,6 +90,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
             val start = location ?: prefs.last?.let { l -> Location("").apply { latitude = l.first; longitude = l.second } }
             controller.setCenter(start?.let { GeoPoint(it.latitude, it.longitude) } ?: GeoPoint(40.2, -3.7))
         }
+        sc.setRadars(car)
         sc.applyStyle(m, style)
         sc.setOnline(m, prefs.online)
         sc.setDim(m, car.isDarkMode)
@@ -144,6 +145,9 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         return style
     }
 
+    /** Los ajustes de radares han cambiado (desde el móvil o el coche). */
+    fun radarsChanged() { scene?.setRadars(car); map?.invalidate() }
+
     fun update(location: Location?, points: List<Waypoint>, target: Waypoint?, track: List<TrackPoint>, following: FollowState?) {
         this.location = location; this.points = points; this.target = target; this.track = track; this.following = following
         redraw()
@@ -160,6 +164,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         sc.points.from = location?.takeIf { Gps.isFresh(it) }?.let { it.latitude to it.longitude }
         sc.setTrack(sc.recording, track)
         sc.setFollow(following, location)
+        sc.radars.update(location, following)
         // La velocidad del GPS (en m/s) en km/h; sin señal, nada.
         speed?.let { s ->
             val loc = location?.takeIf { Gps.isFresh(it) && it.hasSpeed() }

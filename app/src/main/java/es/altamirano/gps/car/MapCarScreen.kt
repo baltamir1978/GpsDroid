@@ -96,6 +96,10 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                 renderer.release()
             }
         })
+        // Los ajustes de radares (clases, encendido) cambian lo que se pinta en el mapa.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { es.altamirano.gps.data.Radars.settingsFlow(carContext).collect { renderer.radarsChanged() } }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 combine(Gps.location, Waypoints.list, Waypoints.target, Recording.state, Following.state) { loc, pts, t, rec, fol -> Five(loc, pts, t, rec, fol) }

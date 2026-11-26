@@ -51,6 +51,7 @@ class MapScene(context: Context, density: Float) {
         outlinePaint.pathEffect = DashPathEffect(floatArrayOf(10f * density, 7f * density), 0f)
     }
     val points = WaypointsOverlay(density)
+    val radars = RadarsOverlay(density)
     val position = PositionOverlay(density)
 
     fun install(map: MapView) {
@@ -60,6 +61,7 @@ class MapScene(context: Context, density: Float) {
         map.overlays += followAhead
         map.overlays += followGap
         map.overlays += recording
+        map.overlays += radars
         map.overlays += points
         map.overlays += position
     }
@@ -84,6 +86,14 @@ class MapScene(context: Context, density: Float) {
     }
 
     fun setTrack(line: Polyline, pts: List<TrackPoint>) = line.setPoints(pts.map { GeoPoint(it.lat, it.lon) })
+
+    /** Los radares que se pueden enseñar, según los ajustes (clases elegidas, avisos encendidos y la fecha de hoy). */
+    fun setRadars(context: Context) {
+        val s = es.altamirano.gps.data.Radars.settings(context)
+        val today = java.time.LocalDate.now().toString()
+        radars.radars = if (!s.enabled) emptyList()
+            else es.altamirano.gps.data.Radars.list(context).filter { it.kind in s.kinds && it.validOn(today) }
+    }
 
     private var followed: FollowRoute? = null
     private var followedSplit = -1

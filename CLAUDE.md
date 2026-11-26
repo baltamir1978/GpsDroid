@@ -36,6 +36,17 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.13.0 (26-nov-2026): los radares, en el mapa.** Bruno: «los radares tienen que tener un icono
+visible en el mapa cuando vas a más de 20 km/h o has elegido ruta en coche».
+- `ui/RadarsOverlay` (en `MapScene`, móvil y coche; encima de los tracks y debajo de los puntos): una
+  señal (círculo blanco, borde rojo; naranja los móviles) con el límite dentro o una cámara si no se
+  sabe; los tramos, además, línea discontinua de principio a fin; los tramos de radar móvil, sólo la
+  línea. Se ve a más de 20 km/h (y 2 min después, por los semáforos) o con una ruta en coche, desde
+  z11, y sólo las clases elegidas en los ajustes (y los móviles, su día). Se recargan al cambiar los
+  ajustes (`Radars.settingsFlow`).
+- **Sin ver en pantalla**: el emulador sin ventana da capturas negras (también `adb emu screenrecord
+  screenshot`); comprobado sólo que no se cae con una ruta en coche por la M-40.
+
 **0.12.0 (26-nov-2026): Android Auto — rutas, pararlas y el coche en el centro.** Bruno: «una vez
 seleccionas una ruta no te deja cancelarla; no te deja seleccionar una ruta, sólo te dice a qué
 distancia está el punto (debería ser al revés); la ubicación del coche debería ser el centro del mapa».

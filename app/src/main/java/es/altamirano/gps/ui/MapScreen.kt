@@ -238,7 +238,17 @@ fun MapScreen() {
     }
     LaunchedEffect(rec.points) { scene.setTrack(scene.recording, rec.points); mapView.invalidate() }
     LaunchedEffect(opened) { scene.setTrack(scene.opened, opened?.points.orEmpty()); mapView.invalidate() }
-    LaunchedEffect(following, location) { scene.setFollow(following, location); mapView.invalidate() }
+    LaunchedEffect(following, location) {
+        scene.setFollow(following, location)
+        scene.radars.update(location, following)
+        mapView.invalidate()
+    }
+    // Los radares del mapa, con los ajustes de ahora (cambian desde Offline o el coche).
+    val radarSettings by es.altamirano.gps.data.Radars.settingsFlow(context).collectAsState()
+    LaunchedEffect(radarSettings) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { scene.setRadars(context) }
+        mapView.invalidate()
+    }
     LaunchedEffect(preview?.current) { scene.setTrack(scene.preview, preview?.current?.route?.points.orEmpty()); mapView.invalidate() }
     // La ruta en vista previa, entera (con tu posición, que es donde empieza).
     LaunchedEffect(previewFit) {
