@@ -19,6 +19,11 @@ import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.MessageInfo
+import androidx.car.app.navigation.NavigationManager
+import androidx.car.app.navigation.NavigationManagerCallback
+import es.altamirano.gps.data.Routing
+import es.altamirano.gps.data.Tiles
+import es.altamirano.gps.core.TravelMode
 import androidx.car.app.navigation.model.RoutingInfo
 import androidx.car.app.navigation.model.Step
 import androidx.car.app.navigation.model.Maneuver
@@ -67,15 +72,26 @@ class MapCarScreen(car: CarContext) : Screen(car) {
     private data class StepCard(val kind: MKind, val exit: Int, val angle: Int, val distanceM: Int,
                                 val cue: String, val then: String?)
 
+    /** Se le ha dicho al coche que estamos navegando (para el cuadro de instrumentos y su botón de parar). */
+    private var navigating = false
+    private var following = Following.state.value != null
+    private val nav by lazy { carContext.getCarService(NavigationManager::class.java) }
+
     init {
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onCreate(owner: LifecycleOwner) {
                 carContext.getCarService(AppManager::class.java).setSurfaceCallback(renderer)
                 renderer.onFollowChanged = { invalidate() }
+                // El coche puede parar la navegación por su cuenta (sus mandos, otra app de navegación).
+                nav.setNavigationManagerCallback(object : NavigationManagerCallback {
+                    override fun onStopNavigation() { navigating = false; Following.stop(carContext) }
+                })
             }
             override fun onStart(owner: LifecycleOwner) = Gps.acquire(OWNER)
             override fun onStop(owner: LifecycleOwner) = Gps.release(OWNER)
             override fun onDestroy(owner: LifecycleOwner) {
+                if (navigating) runCatching { nav.navigationEnded() }
+                runCatching { nav.clearNavigationManagerCallback() }
                 carContext.getCarService(AppManager::class.java).setSurfaceCallback(null)
                 renderer.release()
             }
@@ -85,6 +101,15 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                 combine(Gps.location, Waypoints.list, Waypoints.target, Recording.state, Following.state) { loc, pts, t, rec, fol -> Five(loc, pts, t, rec, fol) }
                     .collect { (loc, pts, t, rec, fol) ->
                         renderer.update(loc, pts, t, rec.points, fol)
+                        // Empieza o acaba una ruta (desde el móvil o desde aquí): avisar al coche y
+                        // cambiar los botones; al empezar, el mapa vuelve a seguirte.
+                        val navNow = fol?.nav != null
+                        if (navNow != navigating) {
+                            navigating = navNow
+                            runCatching { if (navNow) nav.navigationStarted() else nav.navigationEnded() }
+                            if (navNow) renderer.follow = true
+                        }
+                        if ((fol != null) != following) { following = fol != null; invalidate() }
                         val newCard = cardFor(loc, t, rec, fol)
                         if (newCard != card || rec.active != recording) {
                             // Como mucho cada 2 s (salvo al cambiar de destino o de grabar).
@@ -157,8 +182,10 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             .addAction(icon(R.drawable.car_layers) {
                 CarToast.makeText(carContext, renderer.nextStyle().label, CarToast.LENGTH_SHORT).show()
             })
-            .addAction(icon(R.drawable.car_place) { screenManager.push(PointsCarScreen(carContext)) })
-            .addAction(icon(R.drawable.car_add_place) { savePoint() })
+            .addAction(icon(R.drawable.car_place) { screenManager.push(PointsCarScreen(carContext) { w -> routeTo(w) }) })
+            // Con una ruta o un track en marcha, este botón es el de pararlo (guardar un punto conduciendo es lo de menos).
+            .addAction(if (following) icon(R.drawable.car_close, CarColor.RED) { Following.stop(carContext) }
+                else icon(R.drawable.car_add_place) { savePoint() })
             .addAction(icon(if (recording) R.drawable.car_stop else R.drawable.car_record,
                 if (recording) CarColor.RED else CarColor.DEFAULT) { toggleRecording() })
             .build()
@@ -171,7 +198,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
         val b = NavigationTemplate.Builder()
             .setActionStrip(strip)
             .setMapActionStrip(mapStrip)
-            .setPanModeListener { panning -> if (panning) renderer.follow = false }
+            .setPanModeListener { panning -> if (panning) renderer.userMovedMap() }
             .setBackgroundColor(CarColor.createCustom(MapColors.target.toArgb(), MapColors.target.toArgb()))
         card?.step?.let { s ->
             // Yendo por una ruta: la maniobra como la enseñan los navegadores (y el cuadro del coche).
@@ -228,6 +255,46 @@ class MapCarScreen(car: CarContext) : Screen(car) {
         CarToast.makeText(carContext, "Guardado «${w.name}» (se renombra en el móvil)", CarToast.LENGTH_LONG).show()
     }
 
+    /**
+     * Ir a un punto desde el coche: ruta en coche con BRouter desde donde estás, y a guiar. Si faltan
+     * los datos de la zona se bajan (con red); si no se puede, o no hay ruta, se indica la dirección en
+     * línea recta como último recurso.
+     */
+    private fun routeTo(w: es.altamirano.gps.core.Waypoint) {
+        val here = Gps.location.value?.takeIf { Gps.isFresh(it) }
+        if (here == null) { beeline(w, "Sin señal GPS: te indico la dirección cuando la haya"); return }
+        CarToast.makeText(carContext, "Calculando la ruta a «${w.name}»…", CarToast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val from = here.latitude to here.longitude
+            var r = Routing.route(carContext, from, w.lat to w.lon, TravelMode.CAR, here.travelHeading(1f))
+            if (r is Routing.Result.MissingTiles) {
+                if (!Tiles.canUseNetwork(carContext)) { beeline(w, "Faltan los datos de rutas de esta zona y no hay red: te indico la dirección"); return@launch }
+                CarToast.makeText(carContext, "Bajando los datos de rutas de la zona…", CarToast.LENGTH_LONG).show()
+                for (name in r.tiles) {
+                    Routing.download(carContext, name) { _, _ -> }?.let { beeline(w, "$it. Te indico la dirección"); return@launch }
+                }
+                r = Routing.route(carContext, from, w.lat to w.lon, TravelMode.CAR, here.travelHeading(1f))
+            }
+            when (r) {
+                is Routing.Result.Ok -> {
+                    Waypoints.setTarget(null)
+                    val err = Following.startRoute(carContext, r.route, w.name, w.lat, w.lon, TravelMode.CAR)
+                    if (err != null) beeline(w, "$err: te indico la dirección")
+                    else CarToast.makeText(carContext, "${Geo.formatDistance(es.altamirano.gps.core.FollowRoute(r.route.points).totalM)} hasta «${w.name}»",
+                        CarToast.LENGTH_SHORT).show()
+                }
+                is Routing.Result.Failed -> beeline(w, "${r.message}: te indico la dirección")
+                is Routing.Result.MissingTiles -> beeline(w, "Faltan los datos de rutas de esta zona: te indico la dirección")
+            }
+        }
+    }
+
+    /** El último recurso: «ir hacia aquí» con la flecha en línea recta. */
+    private fun beeline(w: es.altamirano.gps.core.Waypoint, why: String) {
+        Waypoints.setTarget(w)
+        CarToast.makeText(carContext, why, CarToast.LENGTH_LONG).show()
+    }
+
     private fun toggleRecording() {
         if (recording) { Recording.stop(carContext); return }
         // Arrancar un servicio en primer plano puede no estar permitido si la app no está a la vista en el móvil.
@@ -254,7 +321,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
 }
 
 /** Los puntos, los más cerca primero (el coche limita cuántas filas se ven); tocar uno lo hace destino. */
-class PointsCarScreen(car: CarContext) : Screen(car) {
+class PointsCarScreen(car: CarContext, private val onPick: (es.altamirano.gps.core.Waypoint) -> Unit) : Screen(car) {
     @Suppress("DEPRECATION") // setTitle/setHeaderAction: Header pide un Android Auto más nuevo.
     override fun onGetTemplate(): Template {
         val limit = runCatching {
@@ -264,6 +331,12 @@ class PointsCarScreen(car: CarContext) : Screen(car) {
         val target = Waypoints.target.value
         val list = ItemList.Builder().setNoItemsMessage("No hay puntos guardados")
         var n = 0
+        // Lo que esté en marcha, lo primero: pararlo.
+        Following.state.value?.let { st ->
+            list.addItem(Row.Builder().setTitle(if (st.nav != null) "Parar la ruta a «${st.nav.destName}»" else "Dejar de seguir «${st.name}»")
+                .setOnClickListener { Following.stop(carContext); screenManager.pop() }.build())
+            n++
+        }
         if (target != null) {
             list.addItem(Row.Builder().setTitle("Dejar de ir a «${target.name}»").setOnClickListener {
                 Waypoints.setTarget(null); screenManager.pop()
@@ -277,7 +350,8 @@ class PointsCarScreen(car: CarContext) : Screen(car) {
                 .setImage(CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.car_place))
                     .setTint(CarColor.createCustom((if (w.id == target?.id) MapColors.target else MapColors.waypoint).toArgb(),
                         (if (w.id == target?.id) MapColors.target else MapColors.waypoint).toArgb())).build())
-                .setOnClickListener { Waypoints.setTarget(w); screenManager.pop() }
+                // Tocar un punto: ruta en coche hasta él (lo calcula la pantalla del mapa, que sigue viva).
+                .setOnClickListener { screenManager.pop(); onPick(w) }
             if (loc != null) row.addText(Direction.describe(Geo.distanceM(loc.latitude, loc.longitude, w.lat, w.lon),
                 Direction.bearingDeg(loc.latitude, loc.longitude, w.lat, w.lon)))
             list.addItem(row.build())

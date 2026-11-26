@@ -36,6 +36,22 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.12.0 (26-nov-2026): Android Auto — rutas, pararlas y el coche en el centro.** Bruno: «una vez
+seleccionas una ruta no te deja cancelarla; no te deja seleccionar una ruta, sólo te dice a qué
+distancia está el punto (debería ser al revés); la ubicación del coche debería ser el centro del mapa».
+- Elegir un punto en el coche (`PointsCarScreen` → `MapCarScreen.routeTo`) calcula la **ruta en
+  coche** y empieza a guiar (sin vista previa); si faltan los datos de la zona los baja (con red);
+  sólo si no se puede (sin GPS, sin datos ni red, sin ruta, o no deja arrancar el servicio) queda la
+  flecha en línea recta, diciendo por qué.
+- **Parar**: con algo en marcha, el botón de guardar punto pasa a ser «Parar» (X roja); y en la lista
+  de puntos, la primera fila. Además `NavigationManager.navigationStarted/Ended` con su
+  `onStopNavigation` (el coche puede pararla por sus mandos; la maniobra va al cuadro).
+- **Centro**: el desplazamiento de osmdroid estaba bien (`getScreenCenterX` = centro + offset: el coche
+  va al centro de lo visible), pero `animateTo` con una posición por segundo iba por detrás: ahora
+  `setCenter` en el acto; al arrastrar (o el modo mover del coche) deja de seguir y **vuelve solo a
+  los 15 s**; al empezar una ruta, vuelve a seguir.
+- **Sin probar** (no hay DHU con Android Auto en el emulador): todo lo de esta versión.
+
 **0.11.0 (26-nov-2026): más radares, ajustes de avisos (también en el coche) y la velocidad en Android
 Auto.** Bruno pasó «Radares Anunciados» (geiserx.github.io/radares-anunciados-ha) y preguntó por
 OpenStreetMap; luego: «que sea configurable la distancia de aviso y el tipo de aviso en la pantalla

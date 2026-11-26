@@ -48,9 +48,23 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     var style: MapStyle = prefs.style
         private set
 
-    /** Seguir la posición: se quita al arrastrar el mapa. [onFollowChanged] avisa para cambiar el botón. */
+    /**
+     * Seguir la posición (el coche en el centro de lo que se ve): se quita al arrastrar el mapa y
+     * vuelve sola a los [RESUME_FOLLOW_MS] sin tocarlo, como en los navegadores. [onFollowChanged]
+     * avisa para cambiar el botón.
+     */
     var follow = true
-        set(v) { val changed = field != v; field = v; if (v) recenter(); if (changed) onFollowChanged?.invoke() }
+        set(v) {
+            val changed = field != v; field = v
+            main.removeCallbacks(resumeFollow)
+            if (v) recenter() else main.postDelayed(resumeFollow, RESUME_FOLLOW_MS)
+            if (changed) onFollowChanged?.invoke()
+        }
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val resumeFollow = Runnable { follow = true }
+
+    /** Al tocar el mapa (arrastrar, el modo de mover del coche): deja de seguir y vuelve a contar los segundos. */
+    fun userMovedMap() { follow = false; main.removeCallbacks(resumeFollow); main.postDelayed(resumeFollow, RESUME_FOLLOW_MS) }
     var onFollowChanged: (() -> Unit)? = null
 
     override fun onSurfaceAvailable(container: SurfaceContainer) {
@@ -104,7 +118,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
         val m = map ?: return
-        follow = false
+        userMovedMap()
         m.scrollBy(distanceX.toInt(), distanceY.toInt())
     }
 
@@ -158,14 +172,19 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     private fun recenter() {
         val m = map ?: return
         val loc = location?.takeIf { Gps.isFresh(it) } ?: return
-        m.controller.animateTo(GeoPoint(loc.latitude, loc.longitude))
+        // En el acto y sin animar: con una posición por segundo, la animación iba siempre por detrás
+        // y el coche no quedaba en el centro yendo deprisa.
+        m.controller.setCenter(GeoPoint(loc.latitude, loc.longitude))
     }
 
     fun release() {
+        main.removeCallbacks(resumeFollow)
         speed = null
         map?.let { m -> m.onPause(); scene?.release(m) }
         presentation?.dismiss()
         display?.release()
         map = null; scene = null; presentation = null; display = null
     }
+
+    private companion object { const val RESUME_FOLLOW_MS = 15_000L }
 }
