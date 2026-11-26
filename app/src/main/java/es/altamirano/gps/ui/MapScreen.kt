@@ -76,6 +76,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -252,7 +253,9 @@ fun MapScreen() {
 
     val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Recording.start(context) }
 
-    Box(Modifier.fillMaxSize()) {
+    // clipToBounds: Compose no recorta las vistas de Android a su hueco, y el MapView (más aún
+    // estirado por la rueda, WheelZoom) pintaba las teselas encima del riel de navegación.
+    Box(Modifier.fillMaxSize().clipToBounds()) {
         AndroidView({ mapView }, Modifier.fillMaxSize())
 
         // Arriba: dónde estás y, si se graba o hay un track abierto, su resumen. En cristal.
