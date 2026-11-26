@@ -43,6 +43,8 @@ class MapScene(context: Context, density: Float) {
     val recording = trackLine(MapColors.recording.toArgb(), 4f * density)
     // El track que se sigue: lo que queda, fuerte; lo andado, claro; y, si estás fuera, una línea
     // discontinua hasta el punto más cercano del track (en línea recta: por dónde volver).
+    /** La ruta que se mira antes de empezar (vista previa con alternativas). */
+    val preview = trackLine(MapColors.follow.toArgb(), 7f * density).apply { outlinePaint.alpha = 210 }
     val followDone = trackLine(MapColors.followDone.toArgb(), 6f * density)
     val followAhead = trackLine(MapColors.follow.toArgb(), 6f * density)
     val followGap = trackLine(MapColors.offTrack.toArgb(), 3f * density).apply {
@@ -53,6 +55,7 @@ class MapScene(context: Context, density: Float) {
 
     fun install(map: MapView) {
         map.overlays += opened
+        map.overlays += preview
         map.overlays += followDone
         map.overlays += followAhead
         map.overlays += followGap

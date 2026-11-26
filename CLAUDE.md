@@ -36,6 +36,23 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.8.0 (26-nov-2026): vista previa con alternativas y recalcular antes del inicio.** Lo pidió
+Bruno («que recalcule aunque no hayas pasado por el inicio» y «más opciones de ruta»; de las opciones
+eligió sólo las alternativas, sin ajustes por modo).
+- `data/RoutePreview`: «Ruta hasta aquí» ya no empieza en el acto: la ruta sale en el mapa (línea
+  azul, encuadrada) con una tarjeta abajo (`RoutePreviewCard`): hasta dónde, «Ruta N de M»,
+  distancia, tiempo de BRouter y desnivel, y «Cancelar», «Otra ruta» y «Empezar» (pide el permiso
+  de notificaciones). «Otra ruta» pide `alternativeidx` 1 a 3 (hasta 4 rutas; se guardan las ya
+  calculadas); si BRouter devuelve una casi igual (longitud a menos del 1 % y el punto medio a menos
+  de 50 m) ya no hay más y vuelve a la primera.
+- Recalcular antes de llegar a la ruta: en *hacia el inicio*, si te alejas más de 50 m de lo más
+  cerca que has estado de ella (`APPROACH_SLACK_M`), es que vas por otro sitio y se calcula otra
+  desde donde estés (en coche la ruta suele empezar en la calle de al lado).
+- **Probado en el emulador**: vista previa a pie de Sol a Plaza de España (1,4 km · 15 min · ↑ 3 m
+  ↓ 19 m), cuatro alternativas distintas (1,4 a 1,5 km) y vuelta a la primera; en coche (1,9 km · 6
+  min), «Empezar», alejarse 300 m al este sin llegar al inicio → ruta nueva de 2,8 km desde ahí.
+  **Sin probar en el móvil.**
+
 **0.7.0 (26-nov-2026): BRouter dentro de la app.** Bruno, con la app BRouter aparte: «me da todo
 tipo de problemas». Ahora el motor va dentro (`brouter-core` 1.7.9 de **JitPack**, sólo para el grupo
 `com.github.abrensch.brouter` en `settings.gradle.kts`; la 1.7.10 no la tiene JitPack; licencia MIT

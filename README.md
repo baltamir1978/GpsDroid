@@ -46,8 +46,9 @@ ubicación por red ni servicios de Google.
   carreteras, calculadas **sin conexión** dentro de la app con el motor de
   [BRouter](https://github.com/abrensch/brouter) y los datos de OpenStreetMap. La primera vez en una
   zona pregunta y baja su cuadro de datos (5° × 5°, de 20 a 170 MB; en Offline se ven y se borran).
-  Indicaciones giro a giro en el mapa (y en voz alta si el móvil tiene motor de voz), y si te sales
-  calcula otra desde donde estés.
+  Antes de empezar se ve en el mapa con distancia, tiempo y desnivel, y se pueden pedir hasta tres
+  alternativas. Indicaciones giro a giro en el mapa (y en voz alta si el móvil tiene motor de voz), y
+  si te sales (o vas por otro sitio antes de llegar al inicio) calcula otra desde donde estés.
 - **Android Auto**: el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
   que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
   distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador. En GrapheneOS necesita Google Play aislado y Android Auto; y, como

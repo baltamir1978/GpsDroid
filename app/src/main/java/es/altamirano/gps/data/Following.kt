@@ -146,6 +146,8 @@ class FollowService : Service() {
         private const val OWNER = "following"
         /** Entre dos recálculos, como poco (BRouter tarda y gasta batería). */
         private const val REROUTE_EVERY_MS = 20_000L
+        /** Antes de llegar a la ruta, cuánto puedes alejarte de ella (sobre lo más cerca que estuviste) sin recalcular. */
+        private const val APPROACH_SLACK_M = 50.0
     }
 
     private var scope: CoroutineScope? = null
@@ -188,6 +190,8 @@ class FollowService : Service() {
         if (st.nav != null) startVoice()
         var follower = TrackFollower(st.route)
         var route = st.route
+        // Antes de llegar a la ruta: lo más cerca que has estado de ella (para ver si te alejas).
+        var closestApproach = Double.MAX_VALUE
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         scope = s
         s.launch {
@@ -195,7 +199,7 @@ class FollowService : Service() {
                 if (!Gps.isFresh(loc)) return@collect
                 var cur = Following.state.value ?: return@collect
                 // Una ruta nueva (recalculada): se sigue desde cero.
-                if (cur.route !== route) { route = cur.route; follower = TrackFollower(route) }
+                if (cur.route !== route) { route = cur.route; follower = TrackFollower(route); closestApproach = Double.MAX_VALUE }
                 val event = follower.update(loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy.toDouble() else null,
                     loc.elapsedRealtimeNanos / 1e9)
                 val fix = follower.last ?: return@collect
@@ -204,8 +208,12 @@ class FollowService : Service() {
                 if (nav != null) {
                     if (fix.status == FollowStatus.ON_TRACK) say = nav.guide.announce(fix.match.alongM)
                     cur = cur.copy(nav = nav.copy(next = if (fix.status == FollowStatus.ARRIVED) null else nav.guide.next(fix.match.alongM)))
+                    // Sin haber llegado aún a la ruta (en coche suele empezar en la calle de al lado):
+                    // si te vas alejando de ella, es que vas por otro sitio.
+                    val awayFromStart = fix.status == FollowStatus.APPROACHING && fix.match.offM > closestApproach + APPROACH_SLACK_M
+                    if (fix.status == FollowStatus.APPROACHING) closestApproach = minOf(closestApproach, fix.match.offM)
                     // Fuera de la ruta: otra desde aquí (no de nuevo hasta pasados unos segundos).
-                    if (fix.status == FollowStatus.OFF_TRACK && !nav.rerouting &&
+                    if ((fix.status == FollowStatus.OFF_TRACK || awayFromStart) && !nav.rerouting &&
                         SystemClock.elapsedRealtime() - lastReroute >= REROUTE_EVERY_MS) {
                         reroute(loc.latitude to loc.longitude, loc.travelHeading(1f))
                         cur = cur.copy(nav = cur.nav?.copy(rerouting = true))

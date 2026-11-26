@@ -70,7 +70,7 @@ object Routing {
 
     /** La ruta de (lat, lon) a (lat, lon). Se puede cancelar (para el motor). */
     suspend fun route(context: Context, from: Pair<Double, Double>, to: Pair<Double, Double>, mode: TravelMode,
-                      headingDeg: Float? = null): Result = withContext(Dispatchers.IO) {
+                      headingDeg: Float? = null, alternative: Int = 0): Result = withContext(Dispatchers.IO) {
         missingTiles(context, from, to).takeIf { it.isNotEmpty() }?.let { return@withContext Result.MissingTiles(it) }
         val profile = runCatching { profileFile(context, mode) }.getOrElse {
             return@withContext Result.Failed("No se pudo preparar el perfil de ruta")
@@ -82,6 +82,8 @@ object Routing {
         val params = HashMap<String, String>().apply {
             put("timode", "2")
             headingDeg?.let { put("heading", it.toInt().toString()) }
+            // 0: la mejor; 1 a 3: alternativas (cada una evita lo que usan las anteriores).
+            if (alternative > 0) put("alternativeidx", alternative.toString())
         }
         collector.setParams(rc, waypoints, params)
         val engine = RoutingEngine(null, null, segmentsDir(context), waypoints, rc)

@@ -50,6 +50,7 @@ import es.altamirano.gps.data.Gps
 import es.altamirano.gps.data.Tracks
 import es.altamirano.gps.data.Waypoints
 import es.altamirano.gps.data.Following
+import es.altamirano.gps.data.RoutePreview
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     MAP("Mapa", Icons.Filled.Map),
@@ -80,6 +81,8 @@ private fun App() {
     LaunchedEffect(fit) { if (fit > 0) tab = Tab.MAP.ordinal }
     val followFit by Following.fitRequest.collectAsState()
     LaunchedEffect(followFit) { if (followFit > 0) tab = Tab.MAP.ordinal }
+    val previewFit by RoutePreview.fitRequest.collectAsState()
+    LaunchedEffect(previewFit) { if (previewFit > 0) tab = Tab.MAP.ordinal }
     val focus by Waypoints.focus.collectAsState()
     LaunchedEffect(focus) { if (focus.n > 0) tab = Tab.MAP.ordinal }
 

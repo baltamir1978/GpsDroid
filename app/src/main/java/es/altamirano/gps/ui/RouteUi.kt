@@ -1,12 +1,7 @@
 package es.altamirano.gps.ui
 
-import android.Manifest
 import android.content.Context
 import android.location.Location
-import android.os.Build
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -58,12 +53,19 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import es.altamirano.gps.core.Maneuver
 import es.altamirano.gps.core.Maneuver.Kind
-import es.altamirano.gps.core.PlannedRoute
 import es.altamirano.gps.core.TravelMode
 import es.altamirano.gps.core.Waypoint
-import es.altamirano.gps.data.Following
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.data.Routing
+import es.altamirano.gps.data.RoutePreview
+import es.altamirano.gps.data.RoutePreviewState
+import es.altamirano.gps.core.Geo
+import es.altamirano.common.ui.glass
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.AltRoute
+import androidx.compose.material.icons.filled.Navigation
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -110,21 +112,12 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
     var askMode by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var pending by remember { mutableStateOf<Pair<PlannedRoute, TravelMode>?>(null) }
     // Faltan cuadros: cuáles, lo que pesan (null mientras se pregunta) y con qué modo se iba a calcular.
     var missing by remember { mutableStateOf<Triple<List<String>, Long?, TravelMode>?>(null) }
     // Bajando: cuadro, bytes y total.
     var downloading by remember { mutableStateOf<Triple<String, Long, Long>?>(null) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
 
-    val go: (PlannedRoute, TravelMode) -> Unit = { r, mode ->
-        Following.startRoute(context, r, w.name, w.lat, w.lon, mode)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
-            ?: onStarted()
-    }
-    // Las indicaciones y los avisos van también por notificación: primero el permiso.
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        pending?.let { (r, m) -> go(r, m) }; pending = null
-    }
     lateinit var calculate: (TravelMode) -> Unit
     calculate = calc@{ mode ->
         context.getSharedPreferences("gps", Context.MODE_PRIVATE).edit { putString("travel_mode", mode.name) }
@@ -142,9 +135,11 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
                     val sizes = withContext(Dispatchers.IO) { r.tiles.map { Routing.remoteSize(it) } }
                     if (missing?.first == r.tiles) missing = Triple(r.tiles, sizes.filterNotNull().sum().takeIf { sizes.all { it != null } }, mode)
                 }
-                is Routing.Result.Ok -> if (Build.VERSION.SDK_INT >= 33) {
-                    pending = r.route to mode; permission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else go(r.route, mode)
+                is Routing.Result.Ok -> {
+                    // Primero se ve en el mapa, con sus datos y las alternativas; desde ahí se empieza.
+                    RoutePreview.show(r.route, w.name, w.lat, w.lon, mode, here.latitude to here.longitude, here.travelHeading(1f))
+                    onStarted()
+                }
             }
         }
     }
@@ -228,5 +223,40 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
             title = { Text("No hay ruta") },
             text = { Text(e) },
             confirmButton = { TextButton(onClick = { error = null }) { Text("Vale") } })
+    }
+}
+
+/**
+ * Abajo en el mapa, con una ruta en vista previa: cuál es (de cuántas), lo que mide, lo que se tarda
+ * según BRouter y el desnivel; «Otra ruta» pide la siguiente alternativa y «Empezar» va por ella.
+ */
+@Composable
+fun RoutePreviewCard(p: RoutePreviewState, modifier: Modifier, onNext: () -> Unit, onCancel: () -> Unit, onStart: () -> Unit) {
+    val o = p.current
+    Column(modifier.glass(RoundedCornerShape(28.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(modeIcon(p.mode), null, tint = MapColors.follow)
+            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                Text("Hasta «${p.destName}»", fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
+                Text(if (p.options.size > 1 || p.exhausted) "Ruta ${p.selected + 1} de ${p.options.size}" else p.mode.label,
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text(buildList {
+            add(Geo.formatDistance(o.lengthM))
+            o.route.totalS?.let { add(Geo.formatDuration(it).let { d -> if (it >= 3600) d.substringBeforeLast(':') + " h" else d.substringBefore(':') + " min" }) }
+            if (o.ascentM != null && o.descentM != null) add("↑ ${es.altamirano.gps.core.Altitude.format(o.ascentM)} ↓ ${es.altamirano.gps.core.Altitude.format(o.descentM)}")
+        }.joinToString("  ·  "), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        p.message?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onCancel) { Text("Cancelar") }
+            OutlinedButton(onClick = onNext, enabled = !p.loading) {
+                if (p.loading) LoadingIndicator(Modifier.size(20.dp)) else Icon(Icons.Filled.AltRoute, null)
+                Text(if (p.loading) "  Buscando…" else "  Otra ruta")
+            }
+            Button(onClick = onStart, enabled = !p.loading, colors = ButtonDefaults.buttonColors(containerColor = MapColors.follow, contentColor = Color.White)) {
+                Icon(Icons.Filled.Navigation, null); Text("  Empezar", fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }

@@ -93,6 +93,7 @@ import es.altamirano.gps.data.Recording
 import es.altamirano.gps.data.Tiles
 import es.altamirano.gps.data.Tracks
 import es.altamirano.gps.data.Following
+import es.altamirano.gps.data.RoutePreview
 import es.altamirano.gps.data.Waypoints
 import es.altamirano.gps.core.Waypoint
 import android.widget.Toast
@@ -126,6 +127,8 @@ fun MapScreen() {
     val opened by Tracks.opened.collectAsState()
     val fit by Tracks.fitRequest.collectAsState()
     val following by Following.state.collectAsState()
+    val preview by RoutePreview.state.collectAsState()
+    val previewFit by RoutePreview.fitRequest.collectAsState()
     val followFit by Following.fitRequest.collectAsState()
 
     LifecycleStartEffect(Unit) {
@@ -236,6 +239,17 @@ fun MapScreen() {
     LaunchedEffect(rec.points) { scene.setTrack(scene.recording, rec.points); mapView.invalidate() }
     LaunchedEffect(opened) { scene.setTrack(scene.opened, opened?.points.orEmpty()); mapView.invalidate() }
     LaunchedEffect(following, location) { scene.setFollow(following, location); mapView.invalidate() }
+    LaunchedEffect(preview?.current) { scene.setTrack(scene.preview, preview?.current?.route?.points.orEmpty()); mapView.invalidate() }
+    // La ruta en vista previa, entera (con tu posición, que es donde empieza).
+    LaunchedEffect(previewFit) {
+        val pts = preview?.current?.route?.points ?: return@LaunchedEffect
+        if (previewFit == 0 || pts.size < 2) return@LaunchedEffect
+        follow = false
+        mapView.post {
+            // Más margen abajo: ahí va la tarjeta con los datos y los botones.
+            mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(pts.map { GeoPoint(it.lat, it.lon) }).increaseByScale(1.5f), false)
+        }
+    }
     // Al empezar a seguir: el track entero y tu posición, si estás cerca.
     LaunchedEffect(followFit) {
         val pts = following?.route?.points ?: return@LaunchedEffect
@@ -272,6 +286,10 @@ fun MapScreen() {
     }
 
     val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Recording.start(context) }
+    // Empezar la ruta de la vista previa: las indicaciones y avisos van también por notificación.
+    val startRoute = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        RoutePreview.start(context)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
 
     // clipToBounds: Compose no recorta las vistas de Android a su hueco, y el MapView (más aún
     // estirado por la rueda, WheelZoom) pintaba las teselas encima del riel de navegación.
@@ -315,7 +333,15 @@ fun MapScreen() {
         // Abajo: la atribución del IGN (la pide la licencia) y la barra flotante de Expressive.
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = bottomBar + 10.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
+            preview?.let { p ->
+                RoutePreviewCard(p, Modifier.padding(horizontal = 12.dp).widthIn(max = 520.dp),
+                    onNext = { RoutePreview.next(context) }, onCancel = { RoutePreview.cancel() },
+                    onStart = {
+                        if (Build.VERSION.SDK_INT >= 33) startRoute.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        else RoutePreview.start(context)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+                    })
+            }
+            if (preview == null) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
                 SmallFloatingActionButton(onClick = {
                     val loc = location
                     if (loc == null || !Gps.isFresh(loc)) Toast.makeText(context, "Todavía no hay posición del GPS", Toast.LENGTH_SHORT).show()
