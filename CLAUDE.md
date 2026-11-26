@@ -36,6 +36,15 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.4.5 (26-nov-2026): la barra del mapa, visible en modo escritorio.** Bruno: «en modo escritorio
+la barra inferior de mapas satélite, etc. no aparece». Con la ventana ancha (riel a la izquierda)
+`LocalBottomBar` era 0 dp, y en modo escritorio la barra de tareas del sistema tapa el borde de
+abajo de la ventana maximizada: la barra flotante (estilo, red, seguir, zoom) quedaba debajo.
+Ahora el riel deja el inset `safeDrawing` de abajo, y arriba (escala del mapa y avisos) también
+`safeDrawing` en vez de `statusBars`, por la barra de título de la ventana. **Sin probar en el
+móvil.** Desde esta versión llega por **Google Play** (prueba interna; ver el `CLAUDE.md` de
+`~/Proyectos`): con eso Android Auto debería aceptarla.
+
 **0.4.4 (25-nov-2026): arrastrar sin tantos saltos.** Bruno, tras la 0.4.3: «para el zoom está
 bien, para el movimiento sigue igual». osmdroid dimensiona la caché de teselas en memoria a las
 que se ven (`TilesOverlay` → `ensureCapacity(visibles + cacheTileOvershoot)`, y el margen es 0):

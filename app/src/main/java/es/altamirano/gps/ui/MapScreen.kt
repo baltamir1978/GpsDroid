@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -61,7 +60,10 @@ import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeOut
@@ -126,7 +128,8 @@ fun MapScreen() {
     }
 
     val density = context.resources.displayMetrics.density
-    val topInsetPx = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
+    // safeDrawing y no statusBars: en modo escritorio arriba está la barra de título de la ventana.
+    val topInsetPx = WindowInsets.safeDrawing.getTop(LocalDensity.current).toFloat()
     val bottomBar = LocalBottomBar.current
     val scene = remember { MapScene(context, density) }
     val position = scene.position
@@ -253,7 +256,7 @@ fun MapScreen() {
         AndroidView({ mapView }, Modifier.fillMaxSize())
 
         // Arriba: dónde estás y, si se graba o hay un track abierto, su resumen. En cristal.
-        Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(12.dp).widthIn(max = 300.dp),
+        Column(Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(12.dp).widthIn(max = 300.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             InfoPill(location)
             target?.let { t ->

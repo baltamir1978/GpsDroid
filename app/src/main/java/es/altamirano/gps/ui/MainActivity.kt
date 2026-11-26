@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.background
@@ -99,7 +100,10 @@ private fun App() {
                         icon = { Icon(t.icon, null) }, label = { Text(t.label) })
                 }
             }
-            Box(Modifier.weight(1f)) { CompositionLocalProvider(LocalBottomBar provides 0.dp) { screen() } }
+            // Sin barra propia abajo, pero en modo escritorio la barra de tareas del sistema tapa el
+            // borde inferior de la ventana maximizada (con 0 dp se comía la barra del mapa).
+            val system = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+            Box(Modifier.weight(1f)) { CompositionLocalProvider(LocalBottomBar provides system) { screen() } }
         }
     } else {
         // El contenido va por debajo de la barra (el mapa se ve a través de ella); cada pantalla deja
