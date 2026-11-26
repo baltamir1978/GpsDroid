@@ -87,3 +87,47 @@ object OfflineZone {
         return if (value < 0) "-$digits" else digits
     }
 }
+
+/**
+ * Las teselas de un pasillo a lo largo de un camino (una ruta o un track): las que tocan una franja
+ * de [marginM] metros a cada lado. Para guardarlas al empezar a seguirlo, por si más adelante no hay
+ * cobertura. Se recorre el camino a pasos más cortos que una tesela y, en cada paso, se añade el
+ * cuadrado de ±[marginM] (de sobra en las curvas, nunca de menos).
+ */
+object RouteCorridor {
+    fun tiles(points: List<TrackPoint>, marginM: Double, z: Int): Set<MapTiles.Tile> {
+        val out = LinkedHashSet<MapTiles.Tile>()
+        if (points.isEmpty()) return out
+        val lat0 = points[0].lat
+        val tileM = MapTiles.metersPerPixel(lat0, z) * MapTiles.TILE_SIZE
+        val step = minOf(marginM, tileM / 2).coerceAtLeast(10.0)
+        fun addAround(lat: Double, lon: Double) {
+            val dLat = marginM / 111_195.0
+            val dLon = marginM / (111_195.0 * max(0.01, cos(lat * PI / 180.0)))
+            val tl = MapTiles.tileAt(lat + dLat, lon - dLon, z)
+            val br = MapTiles.tileAt(lat - dLat, lon + dLon, z)
+            for (x in tl.x..br.x) for (y in tl.y..br.y) out += MapTiles.Tile(z, x, y)
+        }
+        addAround(points[0].lat, points[0].lon)
+        for (i in 1 until points.size) {
+            val a = points[i - 1]; val b = points[i]
+            val n = (Geo.distanceM(a.lat, a.lon, b.lat, b.lon) / step).toInt().coerceAtLeast(1)
+            for (k in 1..n) addAround(a.lat + (b.lat - a.lat) * k / n, a.lon + (b.lon - a.lon) * k / n)
+        }
+        return out
+    }
+
+    /**
+     * Qué bajar: de [zmin] a [zmax] (sin pasar del máximo de cada capa) y, si son demasiadas (un viaje
+     * largo en coche), quitando los zooms de más detalle hasta que quepan en [maxTiles].
+     */
+    fun plan(points: List<TrackPoint>, marginM: Double, zmin: Int, zmax: Int, layers: List<MapLayer>,
+             maxTiles: Long = OfflineZone.MAX_TILES): List<Pair<MapLayer, Set<MapTiles.Tile>>> {
+        var top = zmax
+        while (true) {
+            val plan = layers.flatMap { l -> (zmin..minOf(top, l.maxZoom)).map { z -> l to tiles(points, marginM, z) } }
+            if (plan.sumOf { it.second.size.toLong() } <= maxTiles || top <= zmin) return plan
+            top--
+        }
+    }
+}

@@ -76,6 +76,7 @@ fun FollowPill(st: FollowState, onShow: () -> Unit, onClose: () -> Unit) {
                 (heading?.let { " · ${Direction.relative(fix.bearingToTrack, it.toDouble())}" } ?: "")
                 else Following.summary(st)
             Text(detail, fontSize = 12.sp, color = Color.White.copy(alpha = 0.92f))
+            RouteTilesLine()
         }
         IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "Dejar de seguir", Modifier.size(18.dp), tint = Color.White) }
     }
@@ -97,7 +98,21 @@ private fun ManeuverPill(st: FollowState, next: NextManeuver, tint: Color, onSho
             Text(next.maneuver.title() + (next.then?.let { " · luego ${it.phrase()}" } ?: ""), fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             st.fix?.let { Text(Following.remainingText(it), fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f)) }
+            RouteTilesLine()
         }
         IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "Parar la ruta", Modifier.size(18.dp), tint = Color.White) }
     }
+}
+
+/** «Guardando mapas del camino: 45 %», mientras se bajan (en la píldora, debajo de lo demás). */
+@Composable
+internal fun RouteTilesLine() {
+    val dl by es.altamirano.gps.data.Tiles.download.collectAsState()
+    if (!dl.route) return
+    val text = when {
+        dl.running && dl.total > 0 -> "Guardando mapas del camino: ${dl.done * 100 / dl.total} %"
+        dl.running -> "Guardando mapas del camino…"
+        else -> return
+    }
+    Text(text, fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
 }

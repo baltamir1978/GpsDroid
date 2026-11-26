@@ -45,6 +45,8 @@ data class DownloadState(
     val failed: Int = 0,
     val layer: MapLayer? = null,
     val message: String? = null, // al acabar: resumen o motivo de la parada
+    /** Las teselas del camino que se sigue (no una zona elegida en Offline). */
+    val route: Boolean = false,
 )
 
 object Tiles {
@@ -110,46 +112,94 @@ object Tiles {
     fun start(box: BBox, zmin: Int, zmax: Int, layers: List<MapLayer>) {
         if (job?.isActive == true) return
         val plan = layers.map { l -> l to es.altamirano.gps.core.OfflineZone.plan(box, zmin, zmax, l) }
-        val total = plan.sumOf { it.second.tiles }.toInt()
+        val work = plan.flatMap { (layer, p) ->
+            (p.zmin..p.zmax).map { z ->
+                val tl = MapTiles.tileAt(box.maxLat, box.minLon, z)
+                val br = MapTiles.tileAt(box.minLat, box.maxLon, z)
+                // Perezoso: una zona grande son decenas de miles de teselas.
+                Triple(layer, z, sequence { for (y in tl.y..br.y) for (x in tl.x..br.x) yield(MapTileIndex.getTileIndex(z, x, y)) } to p.perZoom.getValue(z).toInt())
+            }
+        }
+        run(work, route = false, doneMessage = "Zona descargada")
+    }
+
+    /**
+     * Las teselas de un camino (±[marginM]) del mapa [style], de zoom 10 a 17, para tenerlas sin
+     * cobertura más adelante. Si ya hay una descarga en marcha (una zona de Offline), no se pisa.
+     * Devuelve cuántas teselas y lo que ocuparán como mucho, o null si no se empieza.
+     */
+    fun startRoute(points: List<es.altamirano.gps.core.TrackPoint>, style: es.altamirano.gps.core.MapStyle,
+                   marginM: Double = 500.0): Pair<Int, Long>? {
+        if (job?.isActive == true || points.size < 2) return null
+        val plan = es.altamirano.gps.core.RouteCorridor.plan(points, marginM, ROUTE_ZMIN, ROUTE_ZMAX, style.layers)
+        val work = plan.map { (layer, tiles) ->
+            val z = tiles.firstOrNull()?.z ?: ROUTE_ZMIN
+            Triple(layer, z, tiles.asSequence().map { MapTileIndex.getTileIndex(it.z, it.x, it.y) } to tiles.size)
+        }
+        val bytes = plan.sumOf { (layer, tiles) -> tiles.sumOf { layer.estimatedTileBytes(it.z) } }
+        run(work, route = true, doneMessage = "Mapas del camino guardados")
+        return work.sumOf { it.third.second } to bytes
+    }
+
+    /** Hay red de verdad (validada: no un wifi sin salida a internet) y el usuario deja usarla. */
+    fun canUseNetwork(context: Context): Boolean {
+        if (!Prefs(context).online) return false
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java) ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+    /** Al empezar a seguir un camino: guardar sus mapas si hay red (y no se está bajando ya otra cosa). */
+    fun saveAlong(context: Context, points: List<es.altamirano.gps.core.TrackPoint>) {
+        if (canUseNetwork(context)) startRoute(points, Prefs(context).style)
+    }
+
+    private const val ROUTE_ZMIN = 10
+    private const val ROUTE_ZMAX = 17
+
+    /**
+     * Baja capa a capa y de zoom menor a mayor (si se cancela, lo bajado ya sirve para ver la zona
+     * entera aunque con menos detalle), con 3 peticiones a la vez como ZeroGPS: es un servicio
+     * público. Se salta lo que ya está guardado y sin caducar, así que repetir una descarga la reanuda.
+     */
+    private fun run(work: List<Triple<MapLayer, Int, Pair<Sequence<Long>, Int>>>, route: Boolean, doneMessage: String) {
+        val total = work.sumOf { it.third.second }
         lastError = null
-        _download.value = DownloadState(true, 0, total)
+        _download.value = DownloadState(true, 0, total, route = route)
         job = scope.launch {
             val done = AtomicInteger(0)
             val failed = AtomicInteger(0)
             var stopped: String? = null
-            outer@ for ((layer, p) in plan) {
+            for ((layer, _, tilesAndCount) in work) {
+                val (tiles, count) = tilesAndCount
                 val src = sources.getValue(layer)
-                for (z in p.zmin..p.zmax) {
-                    if (cacheDir.usableSpace < MIN_FREE_BYTES) { stopped = "Parada: queda poco espacio libre"; break@outer }
-                    val before = failed.get()
-                    val tl = MapTiles.tileAt(box.maxLat, box.minLon, z)
-                    val br = MapTiles.tileAt(box.minLat, box.maxLon, z)
-                    val queue = Channel<Long>(64)
-                    coroutineScope {
-                        repeat(3) {
-                            launch {
-                                for (index in queue) {
-                                    if (!fetch(src, index)) failed.incrementAndGet()
-                                    val d = done.incrementAndGet()
-                                    if (d % 8 == 0) _download.value = _download.value.copy(done = d, failed = failed.get(), layer = layer)
-                                }
+                if (cacheDir.usableSpace < MIN_FREE_BYTES) { stopped = "Parada: queda poco espacio libre"; break }
+                val before = failed.get()
+                val queue = Channel<Long>(64)
+                coroutineScope {
+                    repeat(3) {
+                        launch {
+                            for (index in queue) {
+                                if (!fetch(src, index)) failed.incrementAndGet()
+                                val d = done.incrementAndGet()
+                                if (d % 8 == 0) _download.value = _download.value.copy(done = d, failed = failed.get(), layer = layer)
                             }
                         }
-                        for (y in tl.y..br.y) for (x in tl.x..br.x) {
-                            if (!isActive) break
-                            queue.send(MapTileIndex.getTileIndex(z, x, y))
-                        }
-                        queue.close()
                     }
-                    // Un zoom entero sin una sola tesela buena: sin red o el IGN no responde.
-                    val tried = p.perZoom.getValue(z)
-                    if (tried >= 8 && failed.get() - before >= tried) { stopped = "Parada: el IGN no responde (¿sin conexión?)"; break@outer }
+                    for (index in tiles) {
+                        if (!isActive) break
+                        queue.send(index)
+                    }
+                    queue.close()
                 }
+                // Un zoom entero sin una sola tesela buena: sin red o el IGN no responde.
+                if (count >= 8 && failed.get() - before >= count) { stopped = "Parada: el IGN no responde (¿sin conexión?)"; break }
             }
             val f = failed.get()
             val why = lastError?.let { " Último error: $it." } ?: ""
             _download.value = DownloadState(false, done.get(), total, f, null,
-                (stopped?.let { "$it.$why" }) ?: if (f == 0) "Zona descargada" else "Descargada con $f teselas que fallaron (repite la descarga para reintentarlas).$why")
+                (stopped?.let { "$it.$why" }) ?: if (f == 0) doneMessage else "Descargada con $f teselas que fallaron (repite la descarga para reintentarlas).$why",
+                route = route)
         }
     }
 

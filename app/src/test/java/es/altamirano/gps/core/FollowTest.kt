@@ -110,6 +110,21 @@ class FollowTest {
         assertEquals(0.0, f.last!!.remainingM, 0.01)
     }
 
+    @Test fun pasilloDeTeselasDelCamino() {
+        // 10 km hacia el norte, ±500 m: a z15 (teselas de ~920 m a esta latitud) son ~11 de alto y 2-3 de ancho.
+        val route = (0..100).map { at(it * 100.0) }
+        val t15 = RouteCorridor.tiles(route, 500.0, 15)
+        assertTrue("${t15.size}", t15.size in 20..40)
+        // Cada tesela del pasillo está a menos de 500 m (más media tesela) del camino.
+        // A z17 las teselas son 4 veces más pequeñas por lado: de 6 a 16 veces más (26 → 288 en esta prueba).
+        val t17 = RouteCorridor.tiles(route, 500.0, 17)
+        assertTrue("${t17.size} / ${t15.size}", t17.size in 6 * t15.size..16 * t15.size)
+        // Con un tope pequeño, se quitan los zooms de más detalle.
+        val plan = RouteCorridor.plan(route, 500.0, 10, 17, listOf(MapLayer.TOPO), maxTiles = 200)
+        assertTrue(plan.sumOf { it.second.size } <= 200)
+        assertTrue(plan.maxOf { it.second.first().z } < 17)
+    }
+
     @Test fun alRevesYAltitudRelativa() {
         val r = FollowRoute(straight).reversed()
         assertEquals(0.0, r.remainingAscentFrom(0), 0.1)

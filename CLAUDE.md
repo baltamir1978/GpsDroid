@@ -36,6 +36,22 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.9.0 (26-nov-2026): guardar los mapas del camino al empezar.** Bruno: «cuando empiezas un viaje con
+conexión, que descargue todas las teselas del camino ±500 m, por si no hay cobertura más adelante».
+- `core/RouteCorridor`: las teselas que tocan una franja de ±500 m a lo largo del camino (se recorre
+  a pasos de menos de media tesela y se añade el cuadrado de ±500 m de cada paso). `plan` va de z10 a
+  z17 (sin pasar del máximo de cada capa) y, si pasa del tope de 100.000, quita zooms de detalle.
+  Prueba: 10 km a z15 = 26 teselas, a z17 = 288.
+- `Tiles`: el motor de descarga se generalizó (`run` con listas de teselas por capa y zoom; las zonas
+  de Offline siguen igual, con secuencias perezosas) y `startRoute`/`saveAlong` bajan el pasillo del
+  mapa que se tenga puesto. Arranca en `FollowService` al empezar a seguir (track o ruta) y al
+  recalcular, sólo con «Usar la red» y red validada (`NET_CAPABILITY_VALIDATED`), y si no hay ya otra
+  descarga en marcha. Progreso en la píldora («Guardando mapas del camino: 45 %») y en Offline.
+- Orden de magnitud: una ruta a pie de 1,4 km son ~300 teselas; 77 km en coche, unas 2.800 (50-60 MB
+  del topográfico).
+- **Probado en el emulador**: ruta de Sol a Plaza de España → «Mapas del camino guardados», 306
+  teselas del topográfico. **Sin probar en el móvil.**
+
 **0.8.2 (26-nov-2026): la versión en Offline y botones para elegir cómo vas.** Bruno: «¿dónde veo la
 versión en la app?» → debajo de la atribución del IGN, «IGN GPS 0.8.2» (`BuildConfig.VERSION_NAME`).
 Y «que la selección de coche, bici o a pie sean botones, no sólo texto» → en «Ruta hasta…» tres

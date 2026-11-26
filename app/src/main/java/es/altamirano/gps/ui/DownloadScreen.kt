@@ -147,7 +147,7 @@ fun DownloadScreen() {
             MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer)))) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (dl.running) {
-                    Text("Descargando" + (dl.layer?.let { " · ${it.label}" } ?: ""), fontWeight = FontWeight.Bold)
+                    Text((if (dl.route) "Guardando los mapas del camino" else "Descargando") + (dl.layer?.let { " · ${it.label}" } ?: ""), fontWeight = FontWeight.Bold)
                     LinearWavyProgressIndicator(progress = { if (dl.total > 0) dl.done.toFloat() / dl.total else 0f }, Modifier.fillMaxWidth().height(14.dp))
                     Text("${OfflineZone.formatCount(dl.done.toLong())} de ${OfflineZone.formatCount(dl.total.toLong())} teselas" +
                         if (dl.failed > 0) " · ${dl.failed} fallos" else "", fontSize = 14.sp)
