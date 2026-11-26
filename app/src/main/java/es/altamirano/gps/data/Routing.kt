@@ -70,7 +70,22 @@ object Routing {
 
     /** La ruta de (lat, lon) a (lat, lon). Se puede cancelar (para el motor). */
     suspend fun route(context: Context, from: Pair<Double, Double>, to: Pair<Double, Double>, mode: TravelMode,
-                      headingDeg: Float? = null, alternative: Int = 0): Result = withContext(Dispatchers.IO) {
+                      headingDeg: Float? = null, alternative: Int = 0): Result {
+        val first = calculate(context, from, to, mode, headingDeg, alternative, offroad = false)
+        // En coche, `car-vario` no entra en pistas de tierra: a un sitio en el campo la ruta acaba en la
+        // carretera más cercana, a kilómetros (lo vio Bruno entre Vadillo de la Sierra y Cabezas del
+        // Villar, Ávila). Si se queda lejos, otra dejando ir por pistas, y la que llegue más cerca.
+        if (mode != TravelMode.CAR || first !is Result.Ok || first.route.gapToM(to.first, to.second) <= OFFROAD_IF_GAP_M) return first
+        val off = calculate(context, from, to, mode, headingDeg, alternative, offroad = true)
+        return if (off is Result.Ok && off.route.gapToM(to.first, to.second) < first.route.gapToM(to.first, to.second) - 100)
+            Result.Ok(off.route.copy(offroad = true)) else first
+    }
+
+    /** Si la ruta en coche acaba más lejos que esto del destino, se prueba por pistas de tierra. */
+    private const val OFFROAD_IF_GAP_M = 300.0
+
+    private suspend fun calculate(context: Context, from: Pair<Double, Double>, to: Pair<Double, Double>, mode: TravelMode,
+                                  headingDeg: Float?, alternative: Int, offroad: Boolean): Result = withContext(Dispatchers.IO) {
         missingTiles(context, from, to).takeIf { it.isNotEmpty() }?.let { return@withContext Result.MissingTiles(it) }
         val profile = runCatching { profileFile(context, mode) }.getOrElse {
             return@withContext Result.Failed("No se pudo preparar el perfil de ruta")
@@ -86,6 +101,8 @@ object Routing {
             if (alternative > 0) put("alternativeidx", alternative.toString())
         }
         collector.setParams(rc, waypoints, params)
+        // Opción del perfil de coche: «carreteras adicionales» (pistas de tierra, caminos agrícolas).
+        if (offroad) collector.setProfileParams(rc, mapOf("use_offroad" to "1"))
         val engine = RoutingEngine(null, null, segmentsDir(context), waypoints, rc)
         engine.quite = true
         // doRun bloquea: en este hilo de IO, y cancelar la corrutina le pide al motor que pare.

@@ -73,6 +73,9 @@ import es.altamirano.gps.core.OfflineZone
 import androidx.compose.material3.LinearWavyProgressIndicator
 import kotlinx.coroutines.launch
 
+/** Más que esto entre el final de la ruta y el destino se avisa (y al llegar se guía en línea recta). */
+const val END_GAP_M = 50.0
+
 /** El dibujo de cada maniobra (los de Material, los mismos que usan los navegadores de Android). */
 fun maneuverIcon(m: Maneuver): ImageVector = when (m.kind) {
     Kind.LEFT -> Icons.Filled.TurnLeft
@@ -247,6 +250,12 @@ fun RoutePreviewCard(p: RoutePreviewState, modifier: Modifier, onNext: () -> Uni
             o.route.totalS?.let { add(Geo.formatDuration(it).let { d -> if (it >= 3600) d.substringBeforeLast(':') + " h" else d.substringBefore(':') + " min" }) }
             if (o.ascentM != null && o.descentM != null) add("↑ ${es.altamirano.gps.core.Altitude.format(o.ascentM)} ↓ ${es.altamirano.gps.core.Altitude.format(o.descentM)}")
         }.joinToString("  ·  "), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        // Lo que la ruta no cubre: hasta el punto no hay camino conocido (falta en OpenStreetMap o es privado).
+        val gap = o.route.gapToM(p.destLat, p.destLon)
+        if (gap > END_GAP_M) Text("La ruta acaba a ${Geo.formatDistance(gap)} del punto: no hay camino conocido hasta él. " +
+            "Al final te guío en línea recta.", fontSize = 13.sp, color = MapColors.target, fontWeight = FontWeight.SemiBold)
+        if (o.route.offroad) Text("Incluye pistas de tierra (la ruta por carretera se quedaba lejos).", fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         p.message?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancelar") }

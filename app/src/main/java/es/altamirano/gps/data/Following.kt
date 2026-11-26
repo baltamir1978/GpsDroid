@@ -118,7 +118,13 @@ object Following {
         val f = st.fix ?: return "Esperando al GPS…"
         if (st.nav?.rerouting == true) return "Recalculando la ruta…"
         return when (f.status) {
-            FollowStatus.ARRIVED -> if (st.nav != null) "Has llegado a «${st.nav.destName}»" else "Has llegado al final del track"
+            FollowStatus.ARRIVED -> if (st.nav != null) {
+                val last = st.route.points.last()
+                val gap = Geo.distanceM(last.lat, last.lon, st.nav.destLat, st.nav.destLon)
+                if (gap > 50) "Fin del camino: «${st.nav.destName}» a ${Geo.formatDistance(gap)} al " +
+                    Direction.cardinal(Direction.bearingDeg(last.lat, last.lon, st.nav.destLat, st.nav.destLon))
+                else "Has llegado a «${st.nav.destName}»"
+            } else "Has llegado al final del track"
             FollowStatus.APPROACHING -> "${if (st.nav != null) "La ruta empieza" else "El track queda"} a ${Geo.formatDistance(f.match.offM)} al ${Direction.cardinal(f.bearingToTrack)}"
             FollowStatus.OFF_TRACK -> "Fuera ${if (st.nav != null) "de la ruta" else "del track"}: a ${Geo.formatDistance(f.match.offM)}, vuelve hacia el ${Direction.cardinalName(f.bearingToTrack)}"
             FollowStatus.ON_TRACK -> st.nav?.next?.let { n -> "En ${Geo.formatDistance(n.distanceM)}, ${n.maneuver.phrase()} · ${remainingText(f)}" }
@@ -312,6 +318,16 @@ class FollowService : Service() {
                 nm.notify(ALERT_ID, alertNotification("Te has salido $ofWhat", Following.summary(st)))
             }
             FollowEvent.ARRIVED -> {
+                val gap = st.nav?.let { n -> st.route.points.last().let { Geo.distanceM(it.lat, it.lon, n.destLat, n.destLon) } } ?: 0.0
+                if (st.nav != null && gap > es.altamirano.gps.ui.END_GAP_M) {
+                    // Se acabó el camino conocido pero el punto está más allá: «ir hacia aquí» con la flecha.
+                    Waypoints.list.value.firstOrNull { it.lat == st.nav.destLat && it.lon == st.nav.destLon }?.let { Waypoints.setTarget(it) }
+                    val last = st.route.points.last()
+                    val text = "Fin del camino: «${st.nav.destName}» queda a ${Geo.formatDistance(gap)} al " +
+                        Direction.cardinalName(Direction.bearingDeg(last.lat, last.lon, st.nav.destLat, st.nav.destLon))
+                    if (ttsReady) speak(text) else nm.notify(ALERT_ID, alertNotification("Fin del camino", text))
+                    return
+                }
                 val text = if (st.nav != null) "Has llegado a «${st.nav.destName}»" else "Final de «${st.name}»"
                 if (st.nav != null && ttsReady) speak(text)
                 else nm.notify(ALERT_ID, alertNotification("Has llegado", text))

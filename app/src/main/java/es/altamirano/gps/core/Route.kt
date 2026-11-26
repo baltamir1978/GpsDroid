@@ -108,7 +108,12 @@ data class PlannedRoute(
     val maneuvers: List<Maneuver>,
     /** Segundos que calcula BRouter (a su ritmo según el perfil); null si no lo da. */
     val totalS: Long?,
-)
+    /** En coche, calculada dejando ir por pistas de tierra (la normal no llegaba cerca del destino). */
+    val offroad: Boolean = false,
+) {
+    /** Lo que queda en línea recta desde el final de la ruta hasta (lat, lon): el tramo sin camino conocido. */
+    fun gapToM(lat: Double, lon: Double): Double = points.last().let { Geo.distanceM(it.lat, it.lon, lat, lon) }
+}
 
 /**
  * La respuesta de BRouter en GeoJSON (`trackFormat=json`): coordenadas `[lon, lat, ele]` de la

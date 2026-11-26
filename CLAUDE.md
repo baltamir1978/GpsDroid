@@ -36,6 +36,24 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.8.1 (26-nov-2026): en coche, por pistas de tierra si hace falta; y el último tramo sin camino.**
+Bruno: entre Vadillo de la Sierra y Cabezas del Villar (Ávila) la ruta le dejaba a más de 4 km de un
+punto. Comprobado con el servidor de BRouter: los caminos de tierra están en OpenStreetMap, pero
+`car-vario` no entra en `highway=track` (a un punto en el campo acababa a 2,8-5,7 km, con rodeos de
+50 km); con su opción `use_offroad` (o a pie o en bici) llega hasta donde acaba el camino.
+- `Routing.route`: en coche, si la ruta acaba a más de 300 m del destino, calcula otra con
+  `use_offroad=1` (`RoutingParamCollector.setProfileParams`) y se queda con la que llegue más cerca
+  (100 m al menos); `PlannedRoute.offroad` lo marca y la vista previa lo dice.
+- Lo que quede sin camino (más de 50 m entre el final de la ruta y el punto, `END_GAP_M`) se avisa en
+  la vista previa y, al llegar al final, «Fin del camino: «X» queda a 599 m al norte» y el punto pasa a
+  ser el destino de «ir hacia aquí» (flecha en línea recta).
+- **Probado en el emulador** (cuadro `W10_N40`, 73 MB, bajado desde la app): de Vadillo de la Sierra a
+  un punto en el campo a 2,8 km, en coche: 3,8 km por pistas, «acaba a 599 m»; recorrida entera, «Fin
+  del camino» y la flecha hacia el punto. **Sin probar en el móvil.**
+- El otro caso de Bruno (en La Granja de San Ildefonso, hasta «Votika 7» le llevaba por Miedes de
+  Atienza) está sin ver: hacen falta las coordenadas del punto; desde el centro de Madrid al pueblo
+  la ruta sale normal (77 km).
+
 **0.8.0 (26-nov-2026): vista previa con alternativas y recalcular antes del inicio.** Lo pidió
 Bruno («que recalcule aunque no hayas pasado por el inicio» y «más opciones de ruta»; de las opciones
 eligió sólo las alternativas, sin ajustes por modo).
