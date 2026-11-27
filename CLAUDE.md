@@ -36,7 +36,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.22.0 (27-nov-2026): el portal de tu municipio, primero.** Bruno: «si meto Eduardo Dato 11, me
+**0.22.0 (27-nov-2026, en Play —prueba interna— el mismo día): el portal de tu municipio, primero.** Bruno: «si meto Eduardo Dato 11, me
 muestra el primero en Campanario (Badajoz), no el Paseo de Eduardo Dato en Madrid». CartoCiudad sólo
 devuelve unos seis resultados y no por cercanía: para «eduardo dato 11» da seis pueblos con esa calle y
 el de Madrid ni sale, así que ordenar por distancia no bastaba.
