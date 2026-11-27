@@ -13,8 +13,8 @@ android {
         applicationId = "es.altamirano.gps"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.21.0"
+        versionCode = 37
+        versionName = "0.22.0"
     }
 
     // La clave de release vive fuera del repositorio; sin ella la release sale sin firmar.

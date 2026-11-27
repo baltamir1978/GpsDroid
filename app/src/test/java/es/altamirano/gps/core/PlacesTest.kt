@@ -3,6 +3,7 @@ package es.altamirano.gps.core
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PlacesTest {
@@ -34,6 +35,30 @@ class PlacesTest {
         val portal = list[0]
         val encima = Place("Alonso Cano 58", "", portal.lat + 0.0001, portal.lon)
         assertEquals(listOf(portal, calle), PlaceSearch.merge(listOf(portal), listOf(encima, calle)))
+    }
+
+    @Test fun buscaTambienEnElMunicipio() {
+        assertEquals("eduardo dato 11, Madrid", PlaceSearch.withTown("eduardo dato 11", "Madrid"))
+        assertNull(PlaceSearch.withTown("alonso cano 56 madrid", "Madrid"))         // ya lo lleva
+        assertNull(PlaceSearch.withTown("mayor 3, Cáceres", "Caceres"))             // sin mirar tildes
+        assertNull(PlaceSearch.withTown("mayor 3", null))
+        assertEquals(56, PlaceSearch.portalNumber("alonso cano 56"))
+        assertEquals(3, PlaceSearch.portalNumber("calle mayor 3b, madrid"))
+        assertNull(PlaceSearch.portalNumber("mercadona segovia"))
+        // Respuesta real de la búsqueda inversa en Sol (recortada).
+        assertEquals("Madrid", PlaceSearch.parseReverseTown("""{"province":"Madrid","muni":"Madrid","type":"portal","address":"PUERTA DEL SOL"}"""))
+        assertNull(PlaceSearch.parseReverseTown("no es json"))
+        // Con el municipio CartoCiudad añade los portales de al lado: sólo el pedido.
+        val madrid = """[{"type":"portal","address":"PASEO EDUARDO DATO 11, Madrid","poblacion":"Madrid","province":"Madrid","postalCode":"28010","lat":40.4319,"lng":-3.6925,"portalNumber":11},
+            {"type":"portal","address":"PASEO EDUARDO DATO 10, Madrid","poblacion":"Madrid","province":"Madrid","postalCode":"28010","lat":40.4322,"lng":-3.6930,"portalNumber":10}]"""
+        val cerca = PlaceSearch.parseCartoCiudad(madrid, number = 11)
+        assertEquals("Calle Dato, Eduardo 11", PlaceSearch.parseCartoCiudad(
+            """[{"type":"portal","address":"CALLE DATO, EDUARDO 11, Zaragoza","poblacion":"Zaragoza","lat":41.6,"lng":-0.9,"portalNumber":11}]""")[0].name)
+        assertEquals(listOf("Paseo Eduardo Dato 11"), cerca.map { it.name })
+        // Las dos búsquedas juntas: sin repetir y, desde Sol, Madrid antes que Campanario.
+        val campanario = Place("Calle Eduardo Dato 11", "Campanario, 06460, Badajoz", 38.864, -5.617)
+        val juntos = PlaceSearch.joinPortals(listOf(cerca, listOf(campanario, cerca[0])), 40.4168, -3.7038)
+        assertEquals(listOf("Paseo Eduardo Dato 11", "Calle Eduardo Dato 11"), juntos.map { it.name })
     }
 
     @Test fun leeLaRespuestaDePhoton() {

@@ -37,22 +37,54 @@ object PlaceSearch {
 
     fun cartoCiudadUrl(query: String): String = "$CARTOCIUDAD?q=${URLEncoder.encode(query.trim(), "UTF-8")}&limit=20"
 
+    /** El municipio de un punto (CartoCiudad, búsqueda inversa). */
+    fun cartoCiudadReverseUrl(lat: Double, lon: Double): String =
+        "https://www.cartociudad.es/geocoder/api/geocoder/reverseGeocode?lon=%.5f&lat=%.5f".format(Locale.ROOT, lon, lat)
+
+    /** Lee el municipio («muni») de la respuesta de la búsqueda inversa; null si no viene. */
+    fun parseReverseTown(json: String): String? = runCatching { JSONObject(json).optString("muni").trim() }.getOrNull()
+        ?.takeIf { it.isNotEmpty() && it != "null" }
+
+    /**
+     * Lo buscado con el municipio donde se está («eduardo dato 11» → «eduardo dato 11, Madrid»), o null
+     * si ya lo lleva. CartoCiudad sólo devuelve unos seis resultados y no por cercanía: «eduardo dato 11»
+     * da seis pueblos con esa calle y el Paseo de Eduardo Dato de Madrid ni sale (lo vio Bruno: le salía
+     * primero el de Campanario, Badajoz). Con el municipio, sale el primero.
+     */
+    fun withTown(query: String, town: String?): String? {
+        if (town.isNullOrBlank()) return null
+        val q = query.trim()
+        return if (fold(q).contains(fold(town))) null else "$q, $town"
+    }
+
+    /** El número de portal escrito («alonso cano 56» → 56), o null. */
+    fun portalNumber(query: String): Int? =
+        Regex("""(?:^|\s|,)(\d+)[a-zA-Z]?(?:$|\s|,)""").find(query.trim())?.groupValues?.get(1)?.toIntOrNull()
+
+    /** Sin tildes y en minúsculas, para comparar nombres. */
+    private fun fold(s: String) = java.text.Normalizer.normalize(s.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}"), "")
+
     /**
      * Lee la respuesta de CartoCiudad (una lista JSON). Sólo los portales (`type` = «portal»): lo
      * demás (calles, municipios) ya lo da Photon. «CALLE ALONSO CANO 58, Madrid» pasa a «Calle Alonso
      * Cano 58» con «Madrid, 28003, Madrid» de detalle. Con posición, los más cerca primero.
      */
-    fun parseCartoCiudad(json: String, lat: Double? = null, lon: Double? = null): List<Place> {
+    fun parseCartoCiudad(json: String, lat: Double? = null, lon: Double? = null, number: Int? = null): List<Place> {
         val list = runCatching { org.json.JSONArray(json) }.getOrNull() ?: return emptyList()
         val out = ArrayList<Place>()
         for (i in 0 until list.length()) {
             val o = list.optJSONObject(i) ?: continue
             if (o.optString("type") != "portal") continue
+            // Con el municipio, CartoCiudad añade los portales de al lado (10, 12, 13…): sólo el pedido.
+            if (number != null && o.optInt("portalNumber", -1) != number) continue
             val la = o.optDouble("lat", Double.NaN); val lo = o.optDouble("lng", Double.NaN)
             if (la.isNaN() || lo.isNaN()) continue
-            val address = o.optString("address").substringBefore(",").trim().takeIf { it.isNotEmpty() } ?: continue
             fun s(k: String) = o.optString(k, "").trim().takeIf { it.isNotEmpty() && it != "null" }
             val town = s("poblacion") ?: s("muni")
+            // «CALLE ALONSO CANO 58, Madrid»: fuera el pueblo del final (sólo el del final: Zaragoza da
+            // «CALLE DATO, EDUARDO 11, Zaragoza», con una coma dentro del nombre).
+            val address = o.optString("address").trim().substringBeforeLast(",").trim().takeIf { it.isNotEmpty() } ?: continue
             val detail = listOfNotNull(town, s("postalCode"), s("province")?.takeIf { it != town }).joinToString(", ")
             out += Place(titleCase(address), detail, la, lo)
         }
@@ -62,6 +94,18 @@ object PlaceSearch {
     /** Los portales de CartoCiudad primero (son lo que se buscaba), y de Photon lo que no repita uno de ellos. */
     fun merge(portals: List<Place>, photon: List<Place>): List<Place> =
         portals + photon.filter { p -> portals.none { Geo.distanceM(it.lat, it.lon, p.lat, p.lon) < 30 } }
+
+    /**
+     * Junta los portales de las dos búsquedas de CartoCiudad (con el municipio y sin él) sin repetir y,
+     * con posición, los más cerca primero.
+     */
+    fun joinPortals(lists: List<List<Place>>, lat: Double?, lon: Double?): List<Place> {
+        val all = lists.flatten().fold(ArrayList<Place>()) { acc, p ->
+            if (acc.none { Geo.distanceM(it.lat, it.lon, p.lat, p.lon) < 5 }) acc += p
+            acc
+        }
+        return if (lat != null && lon != null) all.sortedBy { Geo.distanceM(lat, lon, it.lat, it.lon) } else all
+    }
 
     /** «CALLE DE LA ALONSO CANO» → «Calle de la Alonso Cano»: CartoCiudad lo da todo en mayúsculas. */
     internal fun titleCase(text: String): String {

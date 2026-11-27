@@ -36,6 +36,22 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.22.0 (27-nov-2026): el portal de tu municipio, primero.** Bruno: «si meto Eduardo Dato 11, me
+muestra el primero en Campanario (Badajoz), no el Paseo de Eduardo Dato en Madrid». CartoCiudad sólo
+devuelve unos seis resultados y no por cercanía: para «eduardo dato 11» da seis pueblos con esa calle y
+el de Madrid ni sale, así que ordenar por distancia no bastaba.
+- Se pregunta el municipio donde se está (`reverseGeocode` de CartoCiudad; se recuerda mientras no te
+  muevas más de 1 km) y se busca también «<lo escrito>, <municipio>» (`withTown`; no si ya lo lleva,
+  sin mirar tildes), las dos a la vez. Con el municipio CartoCiudad añade los portales de al lado
+  (10, 12, 13…): se queda sólo el número pedido (`portalNumber`). `joinPortals` junta las dos sin
+  repetir y por distancia.
+- Sin posición del GPS, la última conocida (`Prefs.last`) o donde se miró el mapa (`Prefs.view`), para
+  esto y para Photon.
+- El nombre quita sólo el pueblo del final: Zaragoza da «CALLE DATO, EDUARDO 11, Zaragoza» y salía
+  «Calle Dato».
+- **Probado en el emulador** (release, en Sol): «eduardo dato 11» → «Paseo Eduardo Dato 11 · Madrid,
+  28010 · 2,0 km» el primero. **Sin probar en el móvil.**
+
 **0.21.0 (27-nov-2026, en Play —prueba interna— el mismo día; lleva la 0.20.0, que no se publicó sola): buscar un portal concreto.** Bruno: «cuando busco Alonso Cano 56 me encuentra la
 calle en varios resultados, pero no el número exacto». OpenStreetMap no tiene los portales de muchas
 calles (de Alonso Cano, en Madrid, ninguno: ni Photon ni Nominatim pueden darlo).
