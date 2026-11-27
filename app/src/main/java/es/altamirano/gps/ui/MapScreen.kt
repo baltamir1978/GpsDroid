@@ -254,7 +254,8 @@ fun MapScreen() {
         if (pts.size == 1 || pts.distinct().size == 1) { moveTo(pts[0].first, pts[0].second); return }
         val b = LatLngBounds.Builder().apply { pts.forEach { include(LatLng(it.first, it.second)) } }.build()
         val pad = (48 * density).toInt()
-        val bottom = pad + ((if (bottomExtra) 260 else 120) * density).toInt()
+        // Abajo, la barra de navegación, la flotante y, en la vista previa, la tarjeta de las rutas.
+        val bottom = pad + ((bottomBar.value + if (bottomExtra) 340 else 110) * density).toInt()
         m.easeCamera(CameraUpdateFactory.newLatLngBounds(b, pad, (140 * density).toInt(), pad, bottom), 500)
     }
 

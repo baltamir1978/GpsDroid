@@ -44,6 +44,29 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.28.0 (27-nov-2026): arreglos de la 0.27.0.** Bruno: «cuando marco ruta en el mapa no cambia el
+zoom para enseñar toda la ruta»; «al descargar pone 0 de 1 archivos y no avanza, y sigue midiendo en
+teselas»; «cuando doy a la ubicación con un zoom muy amplio, no acerca».
+- **Descargas de topográfico y satélite**: el descargador de MapLibre pide el estilo por HTTP y con
+  `file://` fallaba («Unable to parse resourceUrl») y se quedaba en «0 de 1». Los estilos raster están
+  publicados en el repositorio (`estilos/topo.json`, `estilos/pnoa.json`, servidos por
+  raw.githubusercontent.com) y las regiones usan esa URL (`MapStyles.downloadUriOf`); al pintar se
+  sigue usando el fichero local (las teselas se guardan por su URL). `EstilosTest` comprueba que los
+  publicados son iguales a `rasterStyleJson` (`ESCRIBIR_ESTILOS=1` los reescribe: **si cambian, hay que
+  subirlos a `main`**). Una región con otro estilo se borra y se rehace; las que dejó la 0.27.0 con
+  `file://` se borran al abrir Offline.
+- Progreso en MB y porcentaje («empezando…» mientras MapLibre sólo conoce el estilo); fuera las teselas
+  de la estimación (sólo los MB).
+- **Encuadre**: el aviso de encuadrar (`fitRequest`) podía llegar a la pantalla antes que la ruta y no
+  hacía nada (con osmdroid funcionaba porque encuadraba con `post`). Ahora se lee el valor del momento
+  (`RoutePreview.state.value`, igual para tracks, seguir y puntos). Margen de abajo con la barra de
+  navegación y la tarjeta.
+- **Seguir desde lejos**: el acercamiento a z15 iba animado y la posición siguiente (cada segundo)
+  cortaba la animación: ahora de golpe (`moveCamera`).
+- **Probado en el emulador `visor`**: topográfico 1 km (2,2 MB) y «Todos» 2 km (110 MB, progreso
+  «12 MB · 8 %»… «Zona descargada»); seguir desde z6 → z15; «Ruta hasta aquí» en coche encuadra la ruta
+  con sus alternativas; «Empezar» guarda el camino del callejero y del topográfico (salen en Offline).
+
 **0.27.0 (27-nov-2026, en Play —prueba interna— el mismo día): todo con MapLibre; el callejero vectorial sustituye al IGN Base.** Bruno:
 «sustituye completamente al ráster con el vectorial; descárgalo, y la limitación de 1 GB me da igual;
 deja el ráster sólo para las capas que tengan otra información» (topográfico y satélite), en el coche y

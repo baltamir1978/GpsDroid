@@ -152,6 +152,8 @@ object Tiles {
     suspend fun saved(): Map<MapLayer, SavedLayer> {
         val out = HashMap<MapLayer, SavedLayer>()
         for (r in regions()) {
+            // Las que dejó a medias la 0.27.0 con el estilo en `file://` no se pueden bajar: fuera.
+            if (r.definition.styleURL?.startsWith("file:") == true) { if (job?.isActive != true) delete(r); continue }
             val m = meta(r) ?: continue
             val bytes = status(r)?.completedResourceSize ?: 0L
             val prev = out[m.layer]
@@ -310,8 +312,12 @@ object Tiles {
             val existing = regions()
             for ((layer, key, def) in work) {
                 if (cacheDir.usableSpace < MIN_FREE_BYTES) { stopped = "Parada: queda poco espacio libre"; break }
-                val region = existing.firstOrNull { meta(it)?.let { m -> m.layer == layer && m.key == key } == true }
-                    ?: create(def(), metaBytes(layer, kind, key))
+                val d = def()
+                // La misma zona ya empezada se reanuda; si se creó con otro estilo (la 0.27.0 los ponía con
+                // `file://` y se quedaban en «0 de 1»), se borra y se hace de nuevo.
+                val old = existing.firstOrNull { meta(it)?.let { m -> m.layer == layer && m.key == key } == true }
+                if (old != null && old.definition.styleURL != d.styleURL) delete(old)
+                val region = old?.takeIf { it.definition.styleURL == d.styleURL } ?: create(d, metaBytes(layer, kind, key))
                 if (region == null) { stopped = "No se pudo preparar la descarga"; break }
                 active = region
                 val finished = CompletableDeferred<Unit>()
