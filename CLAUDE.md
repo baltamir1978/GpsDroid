@@ -44,7 +44,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.27.0 (27-nov-2026): todo con MapLibre; el callejero vectorial sustituye al IGN Base.** Bruno:
+**0.27.0 (27-nov-2026, en Play —prueba interna— el mismo día): todo con MapLibre; el callejero vectorial sustituye al IGN Base.** Bruno:
 «sustituye completamente al ráster con el vectorial; descárgalo, y la limitación de 1 GB me da igual;
 deja el ráster sólo para las capas que tengan otra información» (topográfico y satélite), en el coche y
 en el móvil; el híbrido, la ortofoto con los nombres vectoriales.
