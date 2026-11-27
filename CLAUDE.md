@@ -36,6 +36,22 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.21.0 (27-nov-2026): buscar un portal concreto.** Bruno: «cuando busco Alonso Cano 56 me encuentra la
+calle en varios resultados, pero no el número exacto». OpenStreetMap no tiene los portales de muchas
+calles (de Alonso Cano, en Madrid, ninguno: ni Photon ni Nominatim pueden darlo).
+- Con un número suelto en lo buscado (`PlaceSearch.looksLikeAddress`: «alonso cano 56», «mayor 3b»;
+  no «m30» ni «a-6»), se pregunta además a **CartoCiudad** (IGN, sin clave,
+  `cartociudad.es/geocoder/api/geocoder/candidates`), que tiene los portales de toda España (Catastro y
+  ayuntamientos), a la vez que a Photon (`async`). Si falla, se sigue con lo de Photon.
+- `parseCartoCiudad`: sólo `type` = «portal» (calles y municipios ya los da Photon); el texto viene en
+  mayúsculas («CALLE ALONSO CANO 58, Madrid» → «Calle Alonso Cano 58», `titleCase`); CartoCiudad no
+  ordena por cercanía y da el mismo portal de otros pueblos: se ordena por distancia. `merge`: los
+  portales primero y de Photon lo que no caiga a menos de 30 m de uno. 2 pruebas (respuesta real en
+  `src/test/resources/cartociudad-muestra.json`).
+- **Probado en el emulador** (release, en Sol): «alonso cano 58» → «Calle Alonso Cano 58 · Madrid,
+  28003 · 2,9 km» el primero; luego los de Cúllar Vega, La Rinconada y Morón, y lo de Photon. **Sin
+  probar en el móvil.**
+
 **0.20.0 (27-nov-2026): Offline → Actualizaciones.** Bruno: «¿cada cuánto actualiza? Debería poder
 forzarse desde la app: una parte en ajustes que deje descargar radares, BRouter, teselas… que marque si
 hay nuevas y deje descargar».

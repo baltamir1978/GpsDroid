@@ -5,6 +5,8 @@ import es.altamirano.gps.BuildConfig
 import es.altamirano.gps.core.Place
 import es.altamirano.gps.core.PlaceSearch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
@@ -24,12 +26,29 @@ object Places {
         val here = Gps.location.value
         return withContext(Dispatchers.IO) {
             runCatching {
-                val c = URL(PlaceSearch.url(query, here?.latitude, here?.longitude)).openConnection() as HttpURLConnection
-                c.connectTimeout = 10_000; c.readTimeout = 15_000
-                c.setRequestProperty("User-Agent", "IGN-GPS/" + BuildConfig.VERSION_NAME + " (Android)")
-                val text = try { if (c.responseCode == 200) c.inputStream.use { it.readBytes().decodeToString() } else null } finally { c.disconnect() }
-                if (text == null) Result.Failed("El buscador no responde; prueba en un rato") else Result.Ok(PlaceSearch.parsePhoton(text))
+                coroutineScope {
+                    // Una dirección con número: los portales de CartoCiudad a la vez que Photon. Si CartoCiudad
+                    // falla, se sigue con lo de Photon.
+                    val portals = if (PlaceSearch.looksLikeAddress(query)) async {
+                        runCatching { get(PlaceSearch.cartoCiudadUrl(query)) }.getOrNull()
+                            ?.let { PlaceSearch.parseCartoCiudad(it, here?.latitude, here?.longitude) }.orEmpty()
+                    } else null
+                    val text = get(PlaceSearch.url(query, here?.latitude, here?.longitude))
+                    val found = portals?.await().orEmpty()
+                    when {
+                        text != null -> Result.Ok(PlaceSearch.merge(found, PlaceSearch.parsePhoton(text)))
+                        found.isNotEmpty() -> Result.Ok(found)
+                        else -> Result.Failed("El buscador no responde; prueba en un rato")
+                    }
+                }
             }.getOrElse { Result.Failed("No se pudo buscar: ${it.message ?: "error de red"}") }
         }
+    }
+
+    private fun get(url: String): String? {
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.connectTimeout = 10_000; c.readTimeout = 15_000
+        c.setRequestProperty("User-Agent", "IGN-GPS/" + BuildConfig.VERSION_NAME + " (Android)")
+        return try { if (c.responseCode == 200) c.inputStream.use { it.readBytes().decodeToString() } else null } finally { c.disconnect() }
     }
 }

@@ -2,10 +2,39 @@ package es.altamirano.gps.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class PlacesTest {
     private fun resource(name: String) = javaClass.classLoader!!.getResource(name)!!.readText()
+
+    @Test fun direccionesConNumero() {
+        assertTrue(PlaceSearch.looksLikeAddress("alonso cano 56"))
+        assertTrue(PlaceSearch.looksLikeAddress("calle mayor 3b, madrid"))
+        assertTrue(PlaceSearch.looksLikeAddress("12 de octubre 4"))
+        assertFalse(PlaceSearch.looksLikeAddress("mercadona segovia"))
+        assertFalse(PlaceSearch.looksLikeAddress("m30"))           // una carretera, no un portal
+        assertFalse(PlaceSearch.looksLikeAddress("a-6"))
+    }
+
+    @Test fun leeLosPortalesDeCartoCiudad() {
+        // Respuesta real de CartoCiudad a «alonso cano 58» (27-nov-2026): cuatro portales en España.
+        val sol = 40.4168 to -3.7038
+        val list = PlaceSearch.parseCartoCiudad(resource("cartociudad-muestra.json"), sol.first, sol.second)
+        assertEquals(4, list.size)
+        // Desde Madrid, el de Madrid primero.
+        assertEquals("Calle Alonso Cano 58", list[0].name)
+        assertEquals("Madrid, 28003", list[0].detail)
+        assertEquals(40.44262, list[0].lat, 1e-4)
+        assertEquals("Plaza Alonso Cano 58", PlaceSearch.parseCartoCiudad(resource("cartociudad-muestra.json"))[0].name)
+        assertTrue(PlaceSearch.parseCartoCiudad("no es json").isEmpty())
+        assertEquals("Calle de la Reina 3", PlaceSearch.titleCase("CALLE DE LA REINA 3"))
+        // Lo de Photon que cae encima de un portal no se repite; lo demás va detrás.
+        val calle = Place("Calle de Alonso Cano", "Madrid", 40.4429, -3.6974)
+        val portal = list[0]
+        val encima = Place("Alonso Cano 58", "", portal.lat + 0.0001, portal.lon)
+        assertEquals(listOf(portal, calle), PlaceSearch.merge(listOf(portal), listOf(encima, calle)))
+    }
 
     @Test fun leeLaRespuestaDePhoton() {
         // Respuesta real de Photon a «mercadona segovia» (27-nov-2026).
