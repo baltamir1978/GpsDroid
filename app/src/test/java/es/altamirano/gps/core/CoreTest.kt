@@ -45,10 +45,11 @@ class CoreTest {
         assertTrue(topo.contains("mapa-raster?") && topo.contains("layer=MTN"))
         assertTrue(topo.contains("tilematrix=12") && topo.contains("tilecol=2005") && topo.contains("tilerow=1538"))
         assertTrue(MapLayer.ORTHO.tileUrl(14, 1, 2).contains("pnoa-ma?") && MapLayer.ORTHO.tileUrl(14, 1, 2).contains("layer=OI.OrthoimageCoverage"))
-        assertTrue(MapLayer.BASE.tileUrl(14, 1, 2).contains("layer=IGNBaseTodo"))
-        val labels = MapLayer.LABELS.tileUrl(15, 16039, 12326)
-        assertTrue(labels.contains("ign-base?") && labels.contains("layer=IGNBaseOrto") && labels.contains("format=image/png"))
         assertTrue(MapLayer.ORTHO.tileUrl(14, 1, 2).contains("format=image/jpeg"))
+        // La plantilla para MapLibre deja {z}/{x}/{y} en su sitio.
+        val t = MapLayer.TOPO.urlTemplate()
+        assertTrue(t.contains("tilematrix={z}") && t.contains("tilerow={y}") && t.contains("tilecol={x}"))
+        assertTrue(!MapLayer.VECTOR.raster && MapLayer.TOPO.raster)
     }
 
     @Test fun estilosDelMapa() {
@@ -57,10 +58,13 @@ class CoreTest {
         assertEquals(MapStyle.TOPO, MapStyle.fromKey("nada"))
         assertEquals(MapStyle.HYBRID, MapStyle.ORTHO.next())
         assertEquals(MapStyle.TOPO, MapStyle.BASE.next())
-        assertEquals(listOf(MapLayer.ORTHO, MapLayer.LABELS), MapStyle.HYBRID.layers)
+        // El híbrido: la ortofoto con los nombres del vectorial; «base» (el antiguo IGN Base) es ahora el callejero vectorial.
+        assertEquals(listOf(MapLayer.ORTHO, MapLayer.VECTOR), MapStyle.HYBRID.layers)
         assertEquals(19, MapStyle.HYBRID.maxZoom)
+        assertEquals(MapStyle.BASE, MapStyle.fromKey("base"))
+        assertEquals(listOf(MapLayer.VECTOR), MapStyle.BASE.layers)
         // Satélite + Híbrido: la ortofoto se baja una vez.
-        assertEquals(listOf(MapLayer.ORTHO, MapLayer.LABELS), MapStyle.layersOf(listOf(MapStyle.ORTHO, MapStyle.HYBRID)))
+        assertEquals(listOf(MapLayer.ORTHO, MapLayer.VECTOR), MapStyle.layersOf(listOf(MapStyle.ORTHO, MapStyle.HYBRID)))
         assertEquals(MapLayer.entries.toList(), MapStyle.layersOf(MapStyle.entries).sortedBy { it.ordinal })
     }
 
@@ -124,9 +128,10 @@ class CoreTest {
         assertEquals(19, OfflineZone.plan(b, 1, 30, MapLayer.ORTHO).zmax)
         val t15 = OfflineZone.plan(b, 15, 15, MapLayer.TOPO)
         val o15 = OfflineZone.plan(b, 15, 15, MapLayer.ORTHO)
-        val b15 = OfflineZone.plan(b, 15, 15, MapLayer.BASE)
-        assertTrue(t15.tiles == o15.tiles && o15.tiles == b15.tiles)
-        assertTrue(t15.bytes > o15.bytes && o15.bytes > b15.bytes)
+        val v15 = OfflineZone.plan(b, 15, 15, MapLayer.VECTOR)
+        assertTrue(t15.tiles == o15.tiles && o15.tiles == v15.tiles)
+        // El vectorial pesa más que las imágenes a ese zoom (medido en Madrid).
+        assertTrue(v15.bytes > t15.bytes && t15.bytes > o15.bytes)
         for ((_, box) in OfflineZone.PRESETS) {
             val pp = OfflineZone.plan(box, 5, 14, MapLayer.TOPO)
             assertTrue(pp.tiles in 1 until OfflineZone.MAX_TILES)

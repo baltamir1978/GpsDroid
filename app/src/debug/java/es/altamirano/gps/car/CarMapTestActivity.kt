@@ -22,7 +22,7 @@ import java.io.File
  */
 class CarMapTestActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
-    private lateinit var map: CarMap
+    private lateinit var map: CarMapRenderer
     private lateinit var tv: TextureView
     private val w = 1280; private val h = 640
     private var frames = 0
@@ -44,7 +44,9 @@ class CarMapTestActivity : Activity() {
             override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) { frames++ }
         }
         val dark = intent.getBooleanExtra("dark", false)
-        map = if (intent.getBooleanExtra("osm", false)) OsmCarMap(this, dark, es.altamirano.gps.core.MapStyle.TOPO) else VectorCarMap(this, dark)
+        map = CarMapRenderer(this, dark)
+        // --es estilo topo|pnoa|hibrido: probar los otros mapas (se cambia como con el botón de capas).
+        intent.getStringExtra("estilo")?.let { k -> repeat(4) { if (es.altamirano.gps.data.Prefs(this).carStyle != k) map.nextStyle() } }
         map.setPanel(ManeuverOverlay.Panel(null, "250 m", "Gira a la derecha", "15:42 · 12 min · 6,3 km"))
         var lat = 40.4720; var lon = -3.6895; var step = 0
         val tick = object : Runnable {

@@ -1,11 +1,9 @@
 package es.altamirano.gps.ui
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.location.Location
 import android.os.Build
 import android.os.SystemClock
-import android.view.MotionEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -43,7 +41,6 @@ import androidx.compose.ui.Modifier
 import es.altamirano.common.ui.glass
 import es.altamirano.gps.core.MapLayer
 import es.altamirano.gps.core.MapStyle
-import es.altamirano.gps.core.MapTiles
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
@@ -104,17 +101,29 @@ import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.AltRoute
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import org.osmdroid.events.MapListener
-import org.osmdroid.events.ScrollEvent
-import org.osmdroid.events.ZoomEvent
-import org.osmdroid.util.BoundingBox
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.ScaleBarOverlay
 import kotlin.math.pow
 
-@SuppressLint("ClickableViewAccessibility")
+import es.altamirano.gps.map.GpsLayers
+import es.altamirano.gps.map.MapStyles
+import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
+import org.maplibre.android.maps.MapView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+
+/**
+ * El mapa del móvil, con MapLibre (desde la 0.27.0; antes osmdroid): el callejero vectorial del IGN,
+ * el topográfico, el satélite y el híbrido (ortofoto con los nombres del vectorial). Lo de la app
+ * (tracks, ruta, puntos, radares, tu posición) son capas de [GpsLayers], las mismas que en el coche.
+ * Gestos de MapLibre (arrastrar, pellizcar, rueda del ratón) sin girar ni inclinar: norte arriba.
+ *
+ * Zoom: lo que se enseña y se guarda (`z15`…) es el de siempre (teselas de 256); MapLibre cuenta uno menos.
+ */
 @Composable
 fun MapScreen() {
     val context = LocalContext.current
@@ -124,6 +133,8 @@ fun MapScreen() {
     // Seguir la posición: se quita al mover el mapa con el dedo y se vuelve con el botón.
     var follow by remember { mutableStateOf(prefs.view == null) }
     var zoom by remember { mutableDoubleStateOf(prefs.view?.third ?: 6.0) }
+    // La escala: metros que ocupa la barra y su ancho en dp.
+    var scale by remember { mutableStateOf<Pair<Double, Float>?>(null) }
 
     val location by Gps.location.collectAsState()
     val rec by Recording.state.collectAsState()
@@ -140,163 +151,168 @@ fun MapScreen() {
     }
 
     val density = context.resources.displayMetrics.density
-    // safeDrawing y no statusBars: en modo escritorio arriba está la barra de título de la ventana.
-    val topInsetPx = WindowInsets.safeDrawing.getTop(LocalDensity.current).toFloat()
     val bottomBar = LocalBottomBar.current
-    val scene = remember { MapScene(context, density) }
-    val position = scene.position
     val points by Waypoints.list.collectAsState()
     val target by Waypoints.target.collectAsState()
     val focus by Waypoints.focus.collectAsState()
     // Guardar un punto: dónde (pulsación larga o tu posición) y, mientras, el diálogo del nombre.
-    var newPoint by remember { mutableStateOf<GeoPoint?>(null) }
+    var newPoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var newPointEle by remember { mutableStateOf<Double?>(null) }
     var selected by remember { mutableStateOf<Waypoint?>(null) }
-    scene.points.onTap = { selected = it }
-    scene.points.onLongPress = { newPoint = it; newPointEle = null }
+
+    val layers = remember { GpsLayers(context, density, car = false) }
+    var map by remember { mutableStateOf<MapLibreMap?>(null) }
     val mapView = remember {
-        MapView(context).apply {
-            setTileSource(Tiles.sources.getValue(style.base))
-            isTilesScaledToDpi = true
-            setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            minZoomLevel = 5.0
-            maxZoomLevel = style.maxZoom.toDouble()
-            // España por defecto; si no, dónde se quedó o la última posición conocida.
-            val v = prefs.view
-            val last = prefs.last
-            when {
-                v != null -> { controller.setZoom(v.third); controller.setCenter(GeoPoint(v.first, v.second)) }
-                last != null -> { controller.setZoom(15.0); controller.setCenter(GeoPoint(last.first, last.second)) }
-                else -> { controller.setZoom(6.0); controller.setCenter(GeoPoint(40.2, -3.7)) }
+        Tiles.ensureMapLibre(context)
+        // España por defecto; si no, dónde se quedó o la última posición conocida.
+        val v = prefs.view
+        val last = prefs.last
+        val (center, z) = when {
+            v != null -> LatLng(v.first, v.second) to v.third
+            last != null -> LatLng(last.first, last.second) to 15.0
+            else -> LatLng(40.2, -3.7) to 6.0
+        }
+        val opts = MapLibreMapOptions.createFromAttributes(context)
+            .compassEnabled(false).logoEnabled(false).attributionEnabled(false)
+            .rotateGesturesEnabled(false).tiltGesturesEnabled(false)
+            .camera(CameraPosition.Builder().target(center).zoom(z - 1).build())
+        MapView(context, opts).apply { onCreate(null) }
+    }
+    // El ciclo de vida del MapView, con el de la pantalla.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, e ->
+            when (e) {
+                Lifecycle.Event.ON_START -> mapView.onStart()
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                Lifecycle.Event.ON_STOP -> mapView.onStop()
+                else -> {}
             }
-            scene.install(this)
-            // La escala arriba a la derecha: abajo la taparían la barra flotante y la de navegación.
-            overlays += ScaleBarOverlay(this).apply {
-                setAlignRight(true); setScaleBarOffset((16 * density).toInt(), (topInsetPx + 14 * density).toInt())
-            }
-            val wheel = WheelZoom(this)
-            setOnTouchListener { _, e ->
-                // Tocar a medio zoom con la rueda: se aplica ya, para no arrastrar un mapa estirado.
-                if (e.actionMasked == MotionEvent.ACTION_DOWN) wheel.commit()
-                if (e.actionMasked == MotionEvent.ACTION_MOVE) follow = false
+        }
+        lifecycle.addObserver(obs)
+        onDispose {
+            lifecycle.removeObserver(obs)
+            map?.cameraPosition?.target?.let { c -> prefs.view = Triple(c.latitude, c.longitude, (map?.cameraPosition?.zoom ?: 5.0) + 1) }
+            mapView.onPause(); mapView.onStop(); mapView.onDestroy()
+        }
+    }
+
+    /** La escala: una distancia redonda que quepa en unos 90 dp. */
+    fun updateScale(m: MapLibreMap) {
+        val lat = m.cameraPosition.target?.latitude ?: return
+        val perDp = m.projection.getMetersPerPixelAtLatitude(lat)
+        if (perDp <= 0) return
+        val max = perDp * 90
+        val nice = listOf(1.0, 2.0, 5.0).flatMap { b -> (0..7).map { b * 10.0.pow(it) } }.filter { it <= max }.maxOrNull() ?: return
+        scale = nice to (nice / perDp).toFloat()
+    }
+
+    LaunchedEffect(mapView) {
+        mapView.getMapAsync { m ->
+            m.setMinZoomPreference(4.0)
+            m.addOnCameraMoveStartedListener { reason -> if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) follow = false }
+            m.addOnCameraMoveListener { zoom = m.cameraPosition.zoom + 1; updateScale(m) }
+            m.addOnCameraIdleListener { zoom = m.cameraPosition.zoom + 1; updateScale(m) }
+            m.addOnMapLongClickListener { ll -> newPoint = ll.latitude to ll.longitude; newPointEle = null; true }
+            m.addOnMapClickListener { ll ->
+                // Tocar un punto abre su ficha; tocar una ruta clara de la vista previa la elige.
+                val p = m.projection.toScreenLocation(ll)
+                val r = 18 * density
+                val box = android.graphics.RectF(p.x - r, p.y - r, p.x + r, p.y + r)
+                val id = m.queryRenderedFeatures(box, GpsLayers.POINTS_LAYER, GpsLayers.POINTS_TEXT_LAYER)
+                    .firstNotNullOfOrNull { f -> f.getNumberProperty("id")?.toLong() }
+                if (id != null) { selected = Waypoints.list.value.firstOrNull { it.id == id }; return@addOnMapClickListener true }
+                val alt = m.queryRenderedFeatures(box, GpsLayers.ALT_LAYER).firstNotNullOfOrNull { f -> f.getNumberProperty("i")?.toInt() }
+                if (alt != null) { RoutePreview.select(alt); return@addOnMapClickListener true }
                 false
             }
-            // La rueda del ratón (modo escritorio) acerca y aleja; osmdroid no la atiende.
-            setOnGenericMotionListener { v, e ->
-                if (e.actionMasked != MotionEvent.ACTION_SCROLL) return@setOnGenericMotionListener false
-                val ticks = e.getAxisValue(MotionEvent.AXIS_VSCROLL)
-                if (ticks == 0f) return@setOnGenericMotionListener false
-                // Siguiendo tu posición se acerca por el centro (sigues en medio); si no, por
-                // donde está el cursor, como en un mapa de escritorio.
-                if (follow) wheel.onWheel(ticks, v.width / 2f, v.height / 2f)
-                else wheel.onWheel(ticks, e.x, e.y)
-                true
-            }
-            addMapListener(object : MapListener {
-                override fun onScroll(event: ScrollEvent?) = false
-                override fun onZoom(event: ZoomEvent?): Boolean { zoom = zoomLevelDouble; return false }
-            })
-        }
-    }
-    DisposableEffect(Unit) {
-        mapView.onResume()
-        onDispose {
-            val c = mapView.mapCenter
-            prefs.view = Triple(c.latitude, c.longitude, mapView.zoomLevelDouble)
-            mapView.onPause()
-            scene.release(mapView)
+            map = m
+            updateScale(m)
         }
     }
 
-    LaunchedEffect(style) {
+    LaunchedEffect(style, map) {
+        val m = map ?: return@LaunchedEffect
         prefs.style = style
-        scene.applyStyle(mapView, style)
-        zoom = mapView.zoomLevelDouble
+        m.setMaxZoomPreference(style.viewMaxZoom - 1.0)
+        MapStyles.apply(m, style) { st -> layers.install(st) }
     }
-    LaunchedEffect(online) { prefs.online = online; scene.setOnline(mapView, online) }
+    LaunchedEffect(online) { prefs.online = online; Tiles.setOnline(online) }
     LaunchedEffect(Unit) { mapView.keepScreenOn = prefs.keepScreenOn }
 
+    /** Mover el mapa a un punto (con [z] en la escala de siempre, o el zoom de ahora). */
+    fun moveTo(lat: Double, lon: Double, z: Double? = null) {
+        val m = map ?: return
+        m.easeCamera(if (z == null) CameraUpdateFactory.newLatLng(LatLng(lat, lon)) else CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), z - 1), 500)
+    }
+
+    /** Encuadrar unos puntos (más margen abajo si [bottomExtra], por la tarjeta de la vista previa). */
+    fun fitTo(pts: List<Pair<Double, Double>>, bottomExtra: Boolean = false) {
+        val m = map ?: return
+        if (pts.isEmpty()) return
+        if (pts.size == 1 || pts.distinct().size == 1) { moveTo(pts[0].first, pts[0].second); return }
+        val b = LatLngBounds.Builder().apply { pts.forEach { include(LatLng(it.first, it.second)) } }.build()
+        val pad = (48 * density).toInt()
+        val bottom = pad + ((if (bottomExtra) 260 else 120) * density).toInt()
+        m.easeCamera(CameraUpdateFactory.newLatLngBounds(b, pad, (140 * density).toInt(), pad, bottom), 500)
+    }
+
     // La posición: azul con fix, gris con la última conocida. Se guarda al alejarse 200 m.
-    LaunchedEffect(location) {
+    LaunchedEffect(location, map) {
         val loc = location
-        position.location = loc
-        position.fallback = prefs.last
-        scene.points.from = loc?.takeIf { Gps.isFresh(it) }?.let { it.latitude to it.longitude }
+        layers.setPosition(loc, prefs.last)
         if (loc != null && Gps.isFresh(loc)) {
             val last = prefs.last
             if (last == null || Geo.distanceM(last.first, last.second, loc.latitude, loc.longitude) > 200) prefs.last = loc.latitude to loc.longitude
-            if (follow) mapView.controller.animateTo(GeoPoint(loc.latitude, loc.longitude))
+            if (follow) moveTo(loc.latitude, loc.longitude)
         }
-        mapView.invalidate()
     }
     // Repintar el marcador cuando la posición envejece (de azul a gris) aunque no llegue nada.
-    LaunchedEffect(Unit) { while (true) { delay(5000); mapView.invalidate() } }
-    LaunchedEffect(follow) {
+    LaunchedEffect(Unit) { while (true) { delay(5000); layers.setPosition(Gps.location.value, prefs.last) } }
+    LaunchedEffect(follow, map) {
         val loc = location
-        if (follow && loc != null) {
-            if (mapView.zoomLevelDouble < 14) mapView.controller.setZoom(15.0)
-            mapView.controller.animateTo(GeoPoint(loc.latitude, loc.longitude))
-        }
+        if (follow && loc != null && map != null) moveTo(loc.latitude, loc.longitude, if (zoom < 14) 15.0 else null)
     }
-    LaunchedEffect(rec.points) { scene.setTrack(scene.recording, rec.points); mapView.invalidate() }
-    LaunchedEffect(opened) { scene.setTrack(scene.opened, opened?.points.orEmpty()); mapView.invalidate() }
-    LaunchedEffect(following, location) {
-        scene.setFollow(following, location)
-        scene.radars.update(location, following)
-        mapView.invalidate()
-    }
+    LaunchedEffect(rec.points) { layers.setRecording(rec.points) }
+    LaunchedEffect(opened) { layers.setOpened(opened?.points.orEmpty()) }
+    LaunchedEffect(following, location) { layers.setFollow(following, location) }
     // Los radares del mapa, con los ajustes de ahora (cambian desde Offline o el coche).
     val radarSettings by es.altamirano.gps.data.Radars.settingsFlow(context).collectAsState()
-    LaunchedEffect(radarSettings) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { scene.setRadars(context) }
-        mapView.invalidate()
-    }
+    LaunchedEffect(radarSettings) { layers.reloadRadars() }
     // Todas las rutas posibles a la vez: la elegida, fuerte; las otras, claras y se eligen tocándolas.
-    LaunchedEffect(preview?.options, preview?.selected) { scene.setPreview(mapView, preview) { RoutePreview.select(it) }; mapView.invalidate() }
+    LaunchedEffect(preview?.options, preview?.selected) { layers.setPreview(preview) }
     // La ruta en vista previa, entera (con tu posición, que es donde empieza).
-    LaunchedEffect(previewFit) {
+    LaunchedEffect(previewFit, map) {
         val pts = preview?.current?.route?.points ?: return@LaunchedEffect
-        if (previewFit == 0 || pts.size < 2) return@LaunchedEffect
+        if (previewFit == 0 || pts.size < 2 || map == null) return@LaunchedEffect
         follow = false
-        mapView.post {
-            // Más margen abajo: ahí va la tarjeta con los datos y los botones.
-            mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(pts.map { GeoPoint(it.lat, it.lon) }).increaseByScale(1.5f), false)
-        }
+        fitTo(pts.map { it.lat to it.lon }, bottomExtra = true)
     }
     // Al empezar a seguir: el track entero y tu posición, si estás cerca.
-    LaunchedEffect(followFit) {
+    LaunchedEffect(followFit, map) {
         val pts = following?.route?.points ?: return@LaunchedEffect
-        if (followFit == 0 || pts.isEmpty()) return@LaunchedEffect
+        if (followFit == 0 || pts.isEmpty() || map == null) return@LaunchedEffect
         follow = false
-        mapView.post {
-            val geo = pts.map { GeoPoint(it.lat, it.lon) }.toMutableList()
-            location?.takeIf { Gps.isFresh(it) }?.let { l ->
-                val g = GeoPoint(l.latitude, l.longitude)
-                if (pts.minOf { Geo.distanceM(it.lat, it.lon, g.latitude, g.longitude) } < 5000) geo += g
-            }
-            mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(geo).increaseByScale(1.2f), false)
+        val geo = pts.map { it.lat to it.lon }.toMutableList()
+        location?.takeIf { Gps.isFresh(it) }?.let { l ->
+            if (pts.minOf { Geo.distanceM(it.lat, it.lon, l.latitude, l.longitude) } < 5000) geo += l.latitude to l.longitude
         }
+        fitTo(geo)
     }
-    LaunchedEffect(points, target) { scene.points.points = points; scene.points.target = target; mapView.invalidate() }
+    LaunchedEffect(points, target) { layers.setPoints(points, target) }
     // «Ver en el mapa» desde la lista de puntos.
-    LaunchedEffect(focus) {
+    LaunchedEffect(focus, map) {
         val w = focus.point ?: return@LaunchedEffect
+        if (map == null) return@LaunchedEffect
         follow = false
-        mapView.post {
-            if (mapView.zoomLevelDouble < 14) mapView.controller.setZoom(15.0)
-            mapView.controller.setCenter(GeoPoint(w.lat, w.lon))
-        }
+        moveTo(w.lat, w.lon, maxOf(zoom, 15.0))
     }
-    LaunchedEffect(fit) {
+    LaunchedEffect(fit, map) {
         val pts = opened?.points ?: return@LaunchedEffect
-        if (pts.isEmpty()) return@LaunchedEffect
+        if (pts.isEmpty() || map == null) return@LaunchedEffect
         follow = false
-        // Tras el primer pintado: antes el MapView no sabe su tamaño y el encuadre sale mal.
-        mapView.post {
-            if (pts.size == 1) mapView.controller.setCenter(GeoPoint(pts[0].lat, pts[0].lon))
-            else mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(pts.map { GeoPoint(it.lat, it.lon) }).increaseByScale(1.2f), false)
-        }
+        fitTo(pts.map { it.lat to it.lon })
     }
 
     var searchOpen by remember { mutableStateOf(false) }
@@ -307,10 +323,19 @@ fun MapScreen() {
         RoutePreview.start(context)?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
 
-    // clipToBounds: Compose no recorta las vistas de Android a su hueco, y el MapView (más aún
-    // estirado por la rueda, WheelZoom) pintaba las teselas encima del riel de navegación.
+    // clipToBounds: Compose no recorta las vistas de Android a su hueco (el mapa pintaba encima del riel).
     Box(Modifier.fillMaxSize().clipToBounds()) {
         AndroidView({ mapView }, Modifier.fillMaxSize())
+
+        // La escala, arriba a la derecha: abajo la taparían la barra flotante y la de navegación.
+        scale?.let { (m, w) ->
+            Column(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(top = 14.dp, end = 16.dp),
+                horizontalAlignment = Alignment.End) {
+                Text(if (m >= 1000) "${(m / 1000).toInt()} km" else "${m.toInt()} m", fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    color = Color.Black, modifier = Modifier.background(Color.White.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp))
+                Box(Modifier.padding(top = 2.dp).size(width = w.dp, height = 4.dp).background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(2.dp)))
+            }
+        }
 
         // Arriba: dónde estás y, si se graba o hay un track abierto, su resumen. En cristal.
         Column(Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(12.dp).widthIn(max = 300.dp),
@@ -321,15 +346,14 @@ fun MapScreen() {
                     // Que se vean los dos: tú y el destino.
                     follow = false
                     val loc = location
-                    if (loc != null && Gps.isFresh(loc)) mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(listOf(
-                        GeoPoint(loc.latitude, loc.longitude), GeoPoint(t.lat, t.lon))).increaseByScale(1.4f), true)
-                    else mapView.controller.animateTo(GeoPoint(t.lat, t.lon))
+                    if (loc != null && Gps.isFresh(loc)) fitTo(listOf(loc.latitude to loc.longitude, t.lat to t.lon))
+                    else moveTo(t.lat, t.lon)
                 }, onClose = { Waypoints.setTarget(null) })
             }
             following?.let { st ->
                 FollowPill(st, onShow = {
                     follow = false
-                    mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(st.route.points.map { GeoPoint(it.lat, it.lon) }).increaseByScale(1.2f), true)
+                    fitTo(st.route.points.map { it.lat to it.lon })
                 }, onClose = { Following.stop(context) })
             }
             AnimatedVisibility(rec.active, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
@@ -386,7 +410,7 @@ fun MapScreen() {
                 SmallFloatingActionButton(onClick = {
                     val loc = location
                     if (loc == null || !Gps.isFresh(loc)) Toast.makeText(context, "Todavía no hay posición del GPS", Toast.LENGTH_SHORT).show()
-                    else { newPoint = GeoPoint(loc.latitude, loc.longitude); newPointEle = loc.altitudeMsl() }
+                    else { newPoint = loc.latitude to loc.longitude; newPointEle = loc.altitudeMsl() }
                 }, containerColor = MapColors.waypoint, contentColor = Color.White) {
                     Icon(Icons.Filled.AddLocationAlt, "Guardar mi posición como punto")
                 }
@@ -426,10 +450,10 @@ fun MapScreen() {
         }
     }
 
-    newPoint?.let { g ->
-        NameDialog("Guardar punto", Waypoints.nextName(), Geo.formatLatLon(g.latitude, g.longitude), "Guardar",
+    newPoint?.let { (lat, lon) ->
+        NameDialog("Guardar punto", Waypoints.nextName(), Geo.formatLatLon(lat, lon), "Guardar",
             onDismiss = { newPoint = null }) { name ->
-            Waypoints.add(name, g.latitude, g.longitude, newPointEle)
+            Waypoints.add(name, lat, lon, newPointEle)
             newPoint = null
         }
     }
@@ -437,7 +461,7 @@ fun MapScreen() {
     foundPlace?.let { p ->
         PlaceSheet(p, location, onDismiss = { foundPlace = null }, onShowOnMap = {
             follow = false
-            mapView.controller.animateTo(GeoPoint(p.lat, p.lon), maxOf(mapView.zoomLevelDouble, 15.0), null)
+            moveTo(p.lat, p.lon, maxOf(zoom, 15.0))
             foundPlace = null
         })
     }
@@ -447,49 +471,6 @@ fun MapScreen() {
         if (current == null) selected = null
         else WaypointSheet(current, location, isTarget = target?.id == current.id, onDismiss = { selected = null })
     }
-}
-
-/**
- * Zoom con la rueda, medio nivel por golpe (los touchpads mandan fracciones). Mientras se gira, el
- * mapa sólo se estira como una imagen alrededor del cursor, como osmdroid al pellizcar; al parar
- * [SETTLE_MS] se aplica el zoom de una vez, fijando el punto que había bajo el cursor. Aplicarlo
- * golpe a golpe pedía las teselas de cada nivel intermedio (la cola se llenaba de teselas que ya
- * no hacían falta y los rótulos se borraban y volvían): eso eran los saltos en giros largos.
- * Tampoco vale la animación de osmdroid: descarta lo que llega mientras dura.
- */
-private class WheelZoom(private val map: MapView) {
-    private var pending = 0.0
-    private var px = 0f
-    private var py = 0f
-    private val settle = Runnable { commit() }
-
-    fun onWheel(ticks: Float, x: Float, y: Float) {
-        val z = map.zoomLevelDouble
-        // El punto fijo es el del primer golpe: con la vista ya estirada, mover el pivote la
-        // haría saltar (y las coordenadas del evento llegan ya transformadas por la escala).
-        if (pending == 0.0) { px = x; py = y }
-        pending = (z + pending + ticks * 0.5).coerceIn(map.minZoomLevel, map.maxZoomLevel) - z
-        val s = 2.0.pow(pending).toFloat()
-        map.pivotX = px; map.pivotY = py
-        map.scaleX = s; map.scaleY = s
-        map.removeCallbacks(settle)
-        map.postDelayed(settle, SETTLE_MS)
-    }
-
-    fun commit() {
-        map.removeCallbacks(settle)
-        val d = pending
-        pending = 0.0
-        map.scaleX = 1f; map.scaleY = 1f
-        if (d == 0.0) return
-        val anchor = map.projection.fromPixels(px.toInt(), py.toInt())
-        val center = map.mapCenter
-        val (lat, lon) = MapTiles.zoomAnchoredCenter(center.latitude, center.longitude, anchor.latitude, anchor.longitude, d)
-        map.controller.setZoom(map.zoomLevelDouble + d)
-        map.controller.setCenter(GeoPoint(lat, lon))
-    }
-
-    private companion object { const val SETTLE_MS = 200L }
 }
 
 private fun styleIcon(s: MapStyle) = when (s) {

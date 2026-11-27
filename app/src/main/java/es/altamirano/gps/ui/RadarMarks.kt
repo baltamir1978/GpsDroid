@@ -1,7 +1,6 @@
 package es.altamirano.gps.ui
 
 import android.graphics.Canvas
-import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.location.Location
@@ -11,19 +10,15 @@ import es.altamirano.gps.core.RadarKind
 import es.altamirano.gps.data.FollowState
 import es.altamirano.gps.data.Gps
 import es.altamirano.gps.core.TravelMode
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Overlay
 
 /**
  * Los radares en el mapa, como una señal: círculo blanco con borde rojo (naranja los móviles) y el
- * límite dentro, o una cámara si no se sabe; los tramos, además, con una línea discontinua de
- * principio a fin. Sólo yendo en coche: a más de 20 km/h (y dos minutos después, para que no
- * parpadeen en un semáforo) o con una ruta en coche. Sólo desde z11: más lejos serían una nube.
+ * límite dentro, o una cámara si no se sabe (los tramos, además, con una línea discontinua: la pinta
+ * `GpsLayers`). Aquí se decide cuándo se ven —sólo yendo en coche: a más de 20 km/h (y dos minutos
+ * después, para que no parpadeen en un semáforo) o con una ruta en coche— y se dibuja cada señal para
+ * hacer su icono del mapa.
  */
-class RadarsOverlay(private val density: Float) : Overlay() {
-    /** Los radares que se pueden enseñar (ya filtrados por las clases elegidas y la fecha). */
-    var radars: List<Radar> = emptyList()
+class RadarMarks(private val density: Float) {
     private var visibleUntil = 0L
     var visible = false
         private set
@@ -40,45 +35,13 @@ class RadarsOverlay(private val density: Float) : Overlay() {
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; color = 0xFF212121.toInt() }
     private val glyph = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF212121.toInt() }
-    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
-    private val pt = android.graphics.Point()
-    private val pt2 = android.graphics.Point()
-
-    override fun draw(c: Canvas, mapView: MapView, shadow: Boolean) {
-        if (shadow || !visible || mapView.zoomLevelDouble < MIN_ZOOM || radars.isEmpty()) return
-        val box = mapView.boundingBox
-        val mLat = (box.latNorth - box.latSouth) * 0.1; val mLon = (box.lonEast - box.lonWest) * 0.1
-        val proj = mapView.projection
-        line.strokeWidth = 3f * density
-        line.pathEffect = DashPathEffect(floatArrayOf(8f * density, 6f * density), 0f)
-        for (rd in radars) {
-            val inBox = rd.lat in box.latSouth - mLat..box.latNorth + mLat && rd.lon in box.lonWest - mLon..box.lonEast + mLon
-            val endInBox = rd.endLat != null && rd.endLon != null &&
-                rd.endLat in box.latSouth - mLat..box.latNorth + mLat && rd.endLon in box.lonWest - mLon..box.lonEast + mLon
-            if (!inBox && !endInBox) continue
-            val color = colorOf(rd)
-            proj.toPixels(GeoPoint(rd.lat, rd.lon), pt)
-            if (rd.isStretch && rd.endLat != null && rd.endLon != null) {
-                proj.toPixels(GeoPoint(rd.endLat, rd.endLon), pt2)
-                line.color = color
-                c.drawLine(pt.x.toFloat(), pt.y.toFloat(), pt2.x.toFloat(), pt2.y.toFloat(), line)
-            }
-            // Los tramos de radar móvil son sólo la línea (son muchos y casi nunca hay radar).
-            if (rd.kind == RadarKind.MOBILE_STRETCH || !inBox) continue
-            val x = pt.x.toFloat(); val y = pt.y.toFloat()
-            // Derecha aunque el mapa esté girado (el coche, con la dirección arriba).
-            c.save(); c.rotate(-mapView.mapOrientation, x, y)
-            paintRadar(c, x, y, rd)
-            c.restore()
-        }
-    }
 
     /** El color del radar: naranja los móviles, rojo los demás. */
-    fun colorOf(rd: Radar) = if (rd.kind == RadarKind.MOBILE || rd.kind == RadarKind.MOBILE_STRETCH) 0xFFEF6C00.toInt() else 0xFFD32F2F.toInt()
+    fun colorOf(rd: Radar) = if (rd.kind == RadarKind.MOBILE || rd.kind == RadarKind.MOBILE_STRETCH) MOBILE_COLOR else FIXED_COLOR
 
     /**
-     * Una señal de radar (o el semáforo) centrada en ([x], [y]), sin girar. También la usa el mapa
-     * vectorial del coche para hacer sus iconos. Cabe en un cuadrado de 28 dp.
+     * Una señal de radar (o el semáforo) centrada en ([x], [y]), sin girar: con ella se hacen los
+     * iconos del mapa. Cabe en un cuadrado de 28 dp.
      */
     fun paintRadar(c: Canvas, x: Float, y: Float, rd: Radar) {
         val r = 11f * density
@@ -117,9 +80,18 @@ class RadarsOverlay(private val density: Float) : Overlay() {
         }
     }
 
-    private companion object {
-        const val SHOW_KMH = 20f
-        const val KEEP_MS = 120_000L
-        const val MIN_ZOOM = 11.0
+    companion object {
+        const val MOBILE_COLOR = 0xFFEF6C00.toInt()
+        const val FIXED_COLOR = 0xFFD32F2F.toInt()
+        private const val SHOW_KMH = 20f
+        private const val KEEP_MS = 120_000L
     }
+}
+
+/** Los radares que se pueden enseñar, según los ajustes (clases elegidas, avisos encendidos y la fecha de hoy). */
+fun visibleRadars(context: android.content.Context): List<Radar> {
+    val s = es.altamirano.gps.data.Radars.settings(context)
+    val today = java.time.LocalDate.now().toString()
+    return if (!s.enabled) emptyList()
+        else es.altamirano.gps.data.Radars.list(context).filter { it.kind in s.kinds && it.validOn(today) }
 }

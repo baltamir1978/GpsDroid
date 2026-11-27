@@ -22,19 +22,51 @@ proyectos; aquí va lo propio de esta.
 - **`data/Recording`**: `TrackService`, servicio en primer plano tipo `location` (sin
   `ACCESS_BACKGROUND_LOCATION`: se arranca con la app delante). GPX en `files/tracks`, reescrito
   cada 60 s con temporal + rename y al parar. Nombre `yyyy-MM-dd_HHmmss.gpx`.
-- **`data/Tiles`**: osmdroid 6.1.20 (el mismo que TiempoDroid). `IgnTileSource` sobreescribe la
-  URL entera porque el IGN va por parámetros WMTS (`tilerow` = y). Caché SQLite de osmdroid en
-  **`noBackupFilesDir`** (en `cacheDir` Android podría borrar las zonas, y no deben ir a la copia
-  de seguridad); recorte de osmdroid subido a 64 GB (de serie lo deja en 500 MB y se comería las
-  descargas); caducidad forzada a un año. **Descarga propia** (no `CacheManager`): 3 peticiones a
-  la vez, salta lo guardado y sin caducar (repetir = reanudar), comprueba `FF D8`, para con poco
-  espacio o si un zoom entero falla. En memoria, margen de 96 teselas sobre las visibles (`cacheMapTileOvershoot`) y colas de 120.
-- **Mapa** (`ui/MapScreen`): `MapView` en `AndroidView`, `isTilesScaledToDpi` (por eso el zoom
-  máximo es el de la capa: ya se ve ampliado), escala y atribución. Lo de encima de las teselas
-  (rótulos, tracks, puntos, posición) está en `ui/MapScene`, compartido con el coche (`car/`). Seguir se quita al arrastrar (`ACTION_MOVE`). La rueda del ratón hace zoom (`WheelZoom`: estira la vista y aplica el zoom al parar).
+- **Mapas: MapLibre** (`android-sdk-opengl`, desde la 0.27.0; hasta la 0.26.0, osmdroid). `map/MapStyles`:
+  callejero = estilo vectorial del CNIG; topográfico y satélite = estilo mínimo con la capa raster
+  WMTS del IGN (`MapLayer.urlTemplate`), escrito en `files/estilos/<capa>.json` y usado por `file://`
+  (también para las descargas); híbrido = el vectorial con sólo sus símbolos (borde blanco marcado) y la
+  ortofoto debajo. `map/GpsLayers`: todo lo de la app como capas GeoJSON (tracks, rutas, puntos con
+  `id` para tocarlos, alternativas con `i`, radares con iconos de `ui/RadarMarks`, posición y círculo de
+  precisión), igual en el móvil y en el coche; `install` las vuelve a poner tras cada cambio de estilo.
+- **`data/Tiles`**: descargas = regiones de MapLibre (`OfflineManager`) en `files/mbgl-offline.db`,
+  una por capa y zona (`OfflineTilePyramidRegionDefinition`) o por capa y camino
+  (`OfflineGeometryRegionDefinition` con cuadrados de ±500 m cada 250 m: `corridor`); metadatos JSON
+  (capa, zona/camino, clave, fecha); misma clave = reanudar. Sin tope de teselas por región ni para lo
+  visto (`setOfflineMapboxTileCountLimit`, caché ambiental de 1 TB: Bruno no quiere límite). «Renovar»
+  = `invalidate` (MapLibre revalida con el IGN y sólo baja lo cambiado). Lo de osmdroid
+  (`noBackupFilesDir/osmdroid`) ya no se usa: Offline ofrece borrarlo.
+- **Mapa del móvil** (`ui/MapScreen`): `MapView` de MapLibre en `AndroidView`, sin girar ni inclinar;
+  seguir se quita con un gesto (`REASON_API_GESTURE`); pulsación larga = guardar punto; tocar = punto o
+  ruta alternativa (`queryRenderedFeatures` con 18 dp de margen); escala propia (Compose). El zoom que
+  se enseña y se guarda es el de las teselas de 256 (MapLibre: uno menos).
 - Interfaz sólo en español (como ZeroGPS). Material 3 Expressive con los colores del sistema.
 
 ## Estado
+
+**0.27.0 (27-nov-2026): todo con MapLibre; el callejero vectorial sustituye al IGN Base.** Bruno:
+«sustituye completamente al ráster con el vectorial; descárgalo, y la limitación de 1 GB me da igual;
+deja el ráster sólo para las capas que tengan otra información» (topográfico y satélite), en el coche y
+en el móvil; el híbrido, la ortofoto con los nombres vectoriales.
+- Fuera osmdroid (dependencia, `MapScene`, `OsmCarMap`, `IgnTileSource`, la descarga propia, `WheelZoom`:
+  MapLibre hace zoom con la rueda). `MapLayer`: `TOPO`, `ORTHO`, `VECTOR` (clave «base»: quien tenía el
+  IGN Base pasa al callejero); fuera `LABELS`. `MapStyle.BASE` = «Callejero»; `viewMaxZoom`.
+- Coche: `CarMapRenderer` es el único motor (botón de capas: callejero → topográfico → satélite →
+  híbrido); usa `GpsLayers`. Fuera `CarMap`/`VectorCarMap`.
+- Descargas (ver «Cómo está hecha»): zonas en Offline (por estilo: sus capas) y, al empezar a seguir con
+  red, el camino ±500 m de z10 a z17 del callejero y de las capas del estilo del móvil. Offline: por
+  capa, descargas y tamaño, «Vaciar»; «Lo visto» (vaciar la caché ambiental); «Mapas de la versión
+  anterior» con «Borrar». Actualizaciones: «Mapas descargados» con «Renovar».
+- **El vectorial pesa más de lo que parecía**: ~100 KB por tesela en ciudad a z14-15 (el topográfico,
+  ~25); 1 km en Madrid de z5 a z17 fueron 15 MB (estimación subida). Lo dicho a Bruno antes («6 KB,
+  mucho más ligero») estaba mal y se le corrigió.
+- **Las zonas bajadas con osmdroid no valen**: hay que volver a bajarlas (Offline lo explica).
+- `CorridorTest` (47 pruebas). **Probado en el emulador `visor`** (`-gpu host`; depuración y release con
+  R8): móvil con los cuatro mapas, escala, zoom, guardar un punto con pulsación larga y abrir su ficha
+  tocándolo, descarga de 1 km del callejero (545 archivos, 15 MB, «Zona descargada», sale en Guardado);
+  coche con callejero (girado 180°, nombres derechos), topográfico e híbrido. **Sin probar**: el
+  camino al empezar una ruta (hace falta una ruta de BRouter), «Renovar», el modo sin red, tocar las
+  rutas alternativas y todo en el móvil y el coche de verdad.
 
 **0.26.0 (27-nov-2026, en Play —prueba interna— el mismo día; lleva la 0.23.0–0.25.0): Android Auto con el Mapa Base vectorial del IGN.** Play avisa de que deja de admitir 973 modelos (los de 32 bits y x86, por ir sólo arm64): da igual para el Pixel. Bruno: «cuando realizas un
 giro, los títulos de las calles no cambian y permanecen en la dirección en que iba antes, con lo cual se

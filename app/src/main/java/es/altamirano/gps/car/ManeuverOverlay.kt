@@ -8,8 +8,6 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.TextUtils
 import android.text.TextPaint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Overlay
 
 /**
  * La tarjeta de la maniobra (o del destino) pintada en el propio mapa del coche, arriba a la
@@ -17,7 +15,7 @@ import org.osmdroid.views.overlay.Overlay
  * (`setNavigationInfo`), que no deja elegir tamaño ni transparencia y dejaba una esquina negra
  * encima de la esquina redondeada del mapa (Bruno, 27-nov-2026).
  */
-class ManeuverOverlay(private val density: Float) : Overlay() {
+class ManeuverOverlay(private val density: Float) {
     /** Lo que se enseña; null = nada. */
     data class Panel(val icon: Bitmap?, val big: String, val line: String?, val small: String?)
 
@@ -32,15 +30,6 @@ class ManeuverOverlay(private val density: Float) : Overlay() {
     private val iconP = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val box = RectF()
     private val dst = RectF()
-
-    override fun draw(c: Canvas, mapView: MapView, shadow: Boolean) {
-        if (shadow) return
-        panel ?: return
-        // En la esquina de la pantalla, sin el giro del mapa.
-        val pj = mapView.projection
-        pj.save(c, false, false)
-        try { paint(c, mapView.width, mapView.height) } finally { pj.restore(c, false) }
-    }
 
     /** Pinta la tarjeta en un lienzo sin girar de [w]×[h] (también el del mapa vectorial). */
     fun paint(c: Canvas, w: Int, h: Int) {

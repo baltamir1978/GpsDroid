@@ -4,15 +4,13 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Overlay
 
 /**
  * La velocidad, en un círculo pequeño en la esquina de abajo a la izquierda de lo que se ve del mapa
  * (lo que no tapan las tarjetas del coche). Blanco con el número; rojo si hay un radar cerca con
  * límite conocido y vas por encima.
  */
-class SpeedOverlay(private val density: Float) : Overlay() {
+class SpeedOverlay(private val density: Float) {
     var speedKmh: Int? = null
     var limitKmh: Int? = null
     /** Lo visible del mapa en el coche (sin las tarjetas); null = todo. */
@@ -22,15 +20,6 @@ class SpeedOverlay(private val density: Float) : Overlay() {
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val big = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
     private val small = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
-
-    override fun draw(c: Canvas, mapView: MapView, shadow: Boolean) {
-        if (shadow) return
-        speedKmh ?: return
-        // En la esquina de la pantalla, no del mapa: sin el giro del mapa (como la escala de osmdroid).
-        val pj = mapView.projection
-        pj.save(c, false, false)
-        try { paint(c, mapView.width, mapView.height) } finally { pj.restore(c, false) }
-    }
 
     /** Pinta la velocidad en un lienzo sin girar de [w]×[h] (también el del mapa vectorial). */
     fun paint(c: Canvas, w: Int, h: Int) {

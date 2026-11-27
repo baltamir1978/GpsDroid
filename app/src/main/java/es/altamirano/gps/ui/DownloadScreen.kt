@@ -62,6 +62,7 @@ import es.altamirano.gps.data.Prefs
 import es.altamirano.gps.data.Tiles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val RADII = listOf(1.0, 2.0, 5.0, 10.0, 20.0)
@@ -104,10 +105,17 @@ fun DownloadScreen() {
     val free = Tiles.cacheDir.apply { mkdirs() }.usableSpace
     val tooMany = tiles > OfflineZone.MAX_TILES
 
-    val counts by produceState(emptyMap<MapLayer, Long>(), dl.running) {
-        value = withContext(Dispatchers.IO) { MapLayer.entries.associateWith { Tiles.countFor(it) } }
+    var stamp by remember { mutableIntStateOf(0) }
+    val saved by produceState(emptyMap<MapLayer, es.altamirano.gps.data.SavedLayer>(), dl.running, stamp) {
+        Tiles.ensureMapLibre(context)
+        value = Tiles.saved()
     }
-    val dbBytes by produceState(0L, dl.running, purge) { value = withContext(Dispatchers.IO) { Tiles.cacheBytes() } }
+    val dbBytes by produceState(0L, dl.running, stamp) { value = withContext(Dispatchers.IO) { Tiles.cacheBytes() } }
+    // Los mapas guardados con la versión anterior (osmdroid): ya no se usan.
+    val oldBytes by produceState(0L, stamp) { value = withContext(Dispatchers.IO) { Tiles.oldCacheBytes() } }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var clearViewed by remember { mutableStateOf(false) }
+    var deleteOld by remember { mutableStateOf(false) }
 
     val side = gutter()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = LocalBottomBar.current + 16.dp),
@@ -153,7 +161,7 @@ fun DownloadScreen() {
                 if (dl.running) {
                     Text((if (dl.route) "Guardando los mapas del camino" else "Descargando") + (dl.layer?.let { " · ${it.label}" } ?: ""), fontWeight = FontWeight.Bold)
                     LinearWavyProgressIndicator(progress = { if (dl.total > 0) dl.done.toFloat() / dl.total else 0f }, Modifier.fillMaxWidth().height(14.dp))
-                    Text("${OfflineZone.formatCount(dl.done.toLong())} de ${OfflineZone.formatCount(dl.total.toLong())} teselas" +
+                    Text("${OfflineZone.formatCount(dl.done.toLong())} de ${OfflineZone.formatCount(dl.total.toLong())} archivos" +
                         if (dl.failed > 0) " · ${dl.failed} fallos" else "", fontSize = 14.sp)
                     Text("Mantén la app abierta hasta que acabe.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(onClick = { Tiles.cancel() }) { Text("Cancelar") }
@@ -177,12 +185,30 @@ fun DownloadScreen() {
 
         Section("Guardado en el móvil · ${OfflineZone.formatBytes(dbBytes)}") {
             MapLayer.entries.forEach { l ->
+                val sv = saved[l]
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${l.label}: ${OfflineZone.formatCount(counts[l] ?: 0)} teselas", Modifier.weight(1f), fontSize = 14.sp)
-                    TextButton(onClick = { purge = l }, enabled = !dl.running && (counts[l] ?: 0) > 0) { Text("Vaciar") }
+                    Column(Modifier.weight(1f)) {
+                        Text(l.label, fontSize = 14.sp)
+                        Text(if (sv == null) "Nada descargado" else "${sv.regions} ${if (sv.regions == 1) "descarga" else "descargas"} (zonas y caminos) · ${OfflineZone.formatBytes(sv.bytes)}",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = { purge = l }, enabled = !dl.running && sv != null) { Text("Vaciar") }
                 }
             }
-            Text("Incluye lo que se va viendo en el mapa, no sólo las descargas.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Lo visto en el mapa (sin descargar)", Modifier.weight(1f), fontSize = 14.sp)
+                TextButton(onClick = { clearViewed = true }, enabled = !dl.running) { Text("Vaciar") }
+            }
+            Text("Lo que se ve con red se guarda solo y sirve sin cobertura; no tiene tope. Al empezar a seguir una ruta o un track con red se guardan además los mapas del camino (±500 m): el callejero y el mapa que tengas puesto.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (oldBytes > 0) Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Mapas de la versión anterior · ${OfflineZone.formatBytes(oldBytes)}", fontSize = 14.sp)
+                    Text("Desde la 0.27.0 los mapas van con otro motor: lo descargado antes ya no se usa. Vuelve a bajar las zonas que quieras.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = { deleteOld = true }) { Text("Borrar") }
+            }
         }
 
         Section("Actualizaciones") { UpdatesCard(online) }
@@ -220,9 +246,9 @@ fun DownloadScreen() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Usar la red", fontSize = 15.sp)
-                    Text("Bajar las teselas que falten al mover el mapa. Apagado, sólo se ve lo guardado (no gasta datos).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Bajar los mapas que falten al mover el mapa. Apagado, sólo se ve lo guardado (no gasta datos).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(online, { online = it; prefs.online = it })
+                Switch(online, { online = it; prefs.online = it; Tiles.setOnline(it) })
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -243,10 +269,20 @@ fun DownloadScreen() {
     purge?.let { l ->
         AlertDialog(onDismissRequest = { purge = null },
             title = { Text("¿Vaciar ${l.label}?") },
-            text = { Text("Se borran todas las teselas guardadas de este mapa, también las de las zonas descargadas.") },
-            confirmButton = { TextButton(onClick = { Tiles.purge(l); purge = null }) { Text("Vaciar") } },
+            text = { Text("Se borran las zonas y los caminos descargados de este mapa. Sin cobertura dejarán de verse.") },
+            confirmButton = { TextButton(onClick = { purge = null; scope.launch { Tiles.purge(l); stamp++ } }) { Text("Vaciar") } },
             dismissButton = { TextButton(onClick = { purge = null }) { Text("Cancelar") } })
     }
+    if (clearViewed) AlertDialog(onDismissRequest = { clearViewed = false },
+        title = { Text("¿Vaciar lo visto?") },
+        text = { Text("Se borra lo que se ha guardado al ir viendo el mapa con red. Lo descargado (zonas y caminos) se queda.") },
+        confirmButton = { TextButton(onClick = { clearViewed = false; scope.launch { Tiles.clearViewed(); stamp++ } }) { Text("Vaciar") } },
+        dismissButton = { TextButton(onClick = { clearViewed = false }) { Text("Cancelar") } })
+    if (deleteOld) AlertDialog(onDismissRequest = { deleteOld = false },
+        title = { Text("¿Borrar los mapas de la versión anterior?") },
+        text = { Text("Son ${OfflineZone.formatBytes(oldBytes)} que ya no usa la app (el motor de mapas es otro desde la 0.27.0). No se puede deshacer; las zonas se vuelven a bajar desde aquí.") },
+        confirmButton = { TextButton(onClick = { deleteOld = false; scope.launch { withContext(Dispatchers.IO) { Tiles.deleteOldCache() }; stamp++ } }) { Text("Borrar") } },
+        dismissButton = { TextButton(onClick = { deleteOld = false }) { Text("Cancelar") } })
 }
 
 @Composable

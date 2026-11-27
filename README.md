@@ -1,7 +1,7 @@
 # GpsDroid (IGN GPS)
 
 GPS de montaña para Android con los **mapas del Instituto Geográfico Nacional**: topográfico,
-ortofoto, híbrido e IGN Base, tracks GPX y mapas para cuando no hay cobertura. Es la versión para
+ortofoto, híbrido y callejero vectorial, tracks GPX y mapas para cuando no hay cobertura. Es la versión para
 el móvil de [ZeroGPS](https://github.com/baltamir1978/ZeroGPS), la app del Cardputer Zero.
 
 Funciona **sin Google Play** (hecha para GrapheneOS): la posición sale del GPS del móvil, sin
@@ -12,8 +12,11 @@ ubicación por red ni servicios de Google.
 - **Mapa** a pantalla completa con cuatro estilos:
   - **Topográfico**: el MTN 1:25.000 (hasta z17).
   - **Satélite**: la ortofoto PNOA (hasta z19).
-  - **Híbrido**: la ortofoto con los nombres, calles y carreteras del IGN encima.
-  - **IGN Base**: el mapa base vectorial (hasta z18).
+  - **Híbrido**: la ortofoto con los nombres, calles y carreteras del Mapa Base vectorial encima.
+  - **Callejero**: el Mapa Base vectorial del IGN, dibujado en el móvil (nítido a cualquier zoom; en
+    el coche los nombres siguen derechos al girar).
+
+  Todo con MapLibre (desde la 0.27.0; antes osmdroid).
 
   Tu posición con su precisión y, si te mueves, hacia dónde vas; seguir la posición, el nivel de
   zoom, la escala, y un botón para no usar la red (sólo lo guardado, sin gastar datos). En modo escritorio, la
@@ -65,7 +68,7 @@ ubicación por red ni servicios de Google.
   elegir; en el mapa salen como señales (con su límite) yendo a más de 20 km/h o con una ruta en coche;
   en Android Auto, además, la velocidad en una esquina y el mapa con la dirección de la marcha hacia
   arriba (o el norte, a elegir).
-- **Android Auto**: de serie el Mapa Base vectorial del IGN (dibujado en el móvil con MapLibre: los nombres de las calles siguen derechos al girar), y con el botón de capas los mapas de siempre (topográfico, satélite, híbrido, IGN Base, también los descargados); el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
+- **Android Auto**: de serie el callejero vectorial del IGN (los nombres de las calles siguen derechos al girar) y, con el botón de capas, el topográfico, el satélite y el híbrido; el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
   que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
   distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador. En GrapheneOS necesita Google Play aislado y Android Auto; y, como
   la app no viene de Google Play, hay que activar **«Fuentes desconocidas»** en los ajustes de
@@ -74,7 +77,9 @@ ubicación por red ni servicios de Google.
   entera: Guadarrama, Gredos, Picos de Europa, Sierra Nevada…), uno de los mapas o todos, del
   zoom que elijas. Antes dice cuántas teselas son y lo que ocupará; lo bajado no se vuelve a pedir,
   así que repetir una descarga la reanuda. Tope de 100.000 teselas por descarga: el IGN es un
-  servicio público.
+  servicio público. Al empezar a seguir una ruta o un track con red se guardan solos los mapas del
+  camino (±500 m): el callejero y el mapa que tengas puesto. Lo que se ve con red también se queda,
+  sin tope.
 
 ## Compilar
 

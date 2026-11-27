@@ -1,171 +1,276 @@
 package es.altamirano.gps.data
 
 import android.content.Context
-import es.altamirano.gps.BuildConfig
 import es.altamirano.gps.core.BBox
 import es.altamirano.gps.core.MapLayer
-import es.altamirano.gps.core.MapTiles
+import es.altamirano.gps.core.MapStyle
+import es.altamirano.gps.core.TrackPoint
+import es.altamirano.gps.map.MapStyles
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.modules.SqlTileWriter
-import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
-import org.osmdroid.util.MapTileIndex
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
+import org.maplibre.android.MapLibre
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.offline.OfflineGeometryRegionDefinition
+import org.maplibre.android.offline.OfflineManager
+import org.maplibre.android.offline.OfflineRegion
+import org.maplibre.android.offline.OfflineRegionError
+import org.maplibre.android.offline.OfflineRegionStatus
+import org.maplibre.android.offline.OfflineTilePyramidRegionDefinition
+import org.maplibre.geojson.MultiPolygon
+import org.maplibre.geojson.Point
+import org.maplibre.geojson.Polygon
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
+import kotlin.math.cos
 
-/**
- * Una capa del IGN para osmdroid. El IGN no sirve z/x/y en la ruta sino como parámetros de WMTS
- * (`tilerow` = y, `tilecol` = x): por eso se sobreescribe la URL entera. El nombre identifica la capa
- * en la caché de osmdroid (una base SQLite con todas).
- */
-class IgnTileSource(val layer: MapLayer) : OnlineTileSourceBase(
-    "IGN-${layer.key}", 0, layer.maxZoom, MapTiles.TILE_SIZE, if (layer.png) ".png" else ".jpeg", arrayOf("https://www.ign.es/wmts/"), MapLayer.ATTRIBUTION,
-) {
-    override fun getTileURLString(index: Long) =
-        layer.tileUrl(MapTileIndex.getZoom(index), MapTileIndex.getX(index), MapTileIndex.getY(index))
-}
-
-/** Estado de una descarga de zona. */
+/** Estado de una descarga (zona o camino). */
 data class DownloadState(
     val running: Boolean = false,
-    val done: Int = 0,          // teselas ya tratadas (bajadas, ya guardadas o con error)
+    val done: Int = 0,          // recursos ya bajados o ya guardados (teselas, y el estilo, letras e iconos)
     val total: Int = 0,
     val failed: Int = 0,
     val layer: MapLayer? = null,
     val message: String? = null, // al acabar: resumen o motivo de la parada
-    /** Las teselas del camino que se sigue (no una zona elegida en Offline). */
+    /** Los mapas del camino que se sigue (no una zona elegida en Offline). */
     val route: Boolean = false,
 )
 
+/** Lo guardado de una capa: regiones descargadas (zonas y caminos), lo que ocupan y la más vieja. */
+data class SavedLayer(val regions: Int, val bytes: Long, val oldest: Long?)
+
+/**
+ * Mapas sin cobertura, con MapLibre (desde la 0.27.0; antes osmdroid). Dos cosas:
+ * - **Lo que se va viendo** queda en la caché de MapLibre (sin tope práctico: Bruno no quiere límite).
+ * - **Lo descargado** son *regiones* de MapLibre: una por capa y zona (Offline) o por capa y camino (al
+ *   empezar a seguir algo con red). MapLibre baja las teselas del estilo de la capa —el vectorial con sus
+ *   letras e iconos, o las imágenes del IGN— y no las borra nunca de la caché mientras exista la región.
+ *   Repetir una descarga con la misma zona reanuda la región que ya había.
+ * Todo vive en `files/mbgl-offline.db` (la base de MapLibre).
+ */
 object Tiles {
     private lateinit var app: Context
-    val sources = MapLayer.entries.associateWith { IgnTileSource(it) }
+    private var mapLibreReady = false
 
-    /** Lo del mapa y lo de las descargas va a la misma base de osmdroid. */
-    val cacheDir: File get() = File(app.noBackupFilesDir, "osmdroid/tiles")
-
-    /**
-     * Antes de crear ningún `MapView`. La caché va en `noBackupFilesDir`: en `cacheDir` Android
-     * podría borrar las zonas descargadas, y no tiene sentido que pasen a la copia de seguridad.
-     */
     fun init(context: Context) {
         app = context.applicationContext
-        Configuration.getInstance().apply {
-            userAgentValue = BuildConfig.APPLICATION_ID + "/" + BuildConfig.VERSION_NAME
-            osmdroidBasePath = File(app.noBackupFilesDir, "osmdroid")
-            osmdroidTileCache = cacheDir
-            // osmdroid recorta la caché a 500 MB y se llevaría las zonas descargadas: aquí manda el
-            // usuario, que la vacía desde la pantalla de mapas offline.
-            tileFileSystemCacheMaxBytes = 64L shl 30
-            tileFileSystemCacheTrimBytes = 60L shl 30
-            // El IGN apenas cambia sus mapas: una tesela vale un año (si no, al caducar se volverían
-            // a pedir y sin cobertura no se verían mejor).
-            expirationOverrideDuration = 365L * 24 * 3600 * 1000
-            tileDownloadThreads = 4
-            // Arrastrar daba saltos: osmdroid guarda en memoria justo las teselas que se ven
-            // (margen 0), así que las que salían por un borde se tiraban y, al volver, había que
-            // leerlas otra vez con su hueco gris. Con margen se queda lo de alrededor (~256 KB por
-            // tesela: 96 más son ~25 MB por capa). Las colas de 40 se quedan cortas en una
-            // ventana grande de escritorio con dos capas (mapa y rótulos).
-            cacheMapTileOvershoot = 96
-            tileFileSystemMaxQueueSize = 120
-            tileDownloadMaxQueueSize = 120
+    }
+
+    /** Antes de crear un mapa o tocar las descargas: MapLibre, sus topes y los estilos propios. */
+    fun ensureMapLibre(context: Context) {
+        if (mapLibreReady) return
+        mapLibreReady = true
+        val a = context.applicationContext
+        MapLibre.getInstance(a)
+        MapStyles.init(a)
+        setOnline(Prefs(a).online)
+        runCatching {
+            val om = OfflineManager.getInstance(a)
+            // De serie MapLibre corta las regiones en 6.000 teselas y la caché de lo visto en 50 MB.
+            om.setOfflineMapboxTileCountLimit(Long.MAX_VALUE)
+            om.setMaximumAmbientCacheSize(AMBIENT_BYTES, quiet)
         }
     }
 
-    private val writer by lazy { TileDb() }
+    /** «Usar la red»: apagado, MapLibre sólo enseña lo guardado. */
+    fun setOnline(on: Boolean) { MapLibre.setConnected(if (on) null else false) }
 
-    /** La caché de osmdroid con dos consultas más (`getDb` es `protected`). */
-    private class TileDb : SqlTileWriter() {
-        /** La caducidad más próxima de una capa (la tesela más vieja), o null si no hay ninguna. */
-        fun oldestExpiry(provider: String): Long? = db?.rawQuery(
-            "SELECT MIN($COLUMN_EXPIRES) FROM ${org.osmdroid.tileprovider.modules.DatabaseFileArchive.TABLE} WHERE " +
-                "${org.osmdroid.tileprovider.modules.DatabaseFileArchive.COLUMN_PROVIDER} = ?", arrayOf(provider))
-            ?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+    private val quiet = object : OfflineManager.FileSourceCallback {
+        override fun onSuccess() {}
+        override fun onError(message: String) {}
+    }
 
-        /** Da por caducadas todas las teselas de una capa: siguen viéndose, pero se renuevan con red. */
-        fun expireAll(provider: String) = db?.execSQL(
-            "UPDATE ${org.osmdroid.tileprovider.modules.DatabaseFileArchive.TABLE} SET $COLUMN_EXPIRES = 0 WHERE " +
-                "${org.osmdroid.tileprovider.modules.DatabaseFileArchive.COLUMN_PROVIDER} = ?", arrayOf(provider))
+    /** Sólo para mirar el espacio libre del disco donde se guarda. */
+    val cacheDir: File get() = app.filesDir
+
+    private val manager get() = ensureMapLibre(app).let { OfflineManager.getInstance(app) }
+
+    // --- Regiones -------------------------------------------------------------------------------
+
+    private data class Meta(val layer: MapLayer, val kind: String, val key: String, val created: Long)
+
+    private fun meta(r: OfflineRegion): Meta? = runCatching {
+        val j = JSONObject(String(r.metadata))
+        Meta(MapLayer.entries.first { it.key == j.getString("layer") }, j.getString("kind"), j.getString("key"), j.getLong("created"))
+    }.getOrNull()
+
+    private fun metaBytes(layer: MapLayer, kind: String, key: String) = JSONObject()
+        .put("layer", layer.key).put("kind", kind).put("key", key).put("created", System.currentTimeMillis()).toString().toByteArray()
+
+    private suspend fun regions(): List<OfflineRegion> = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { c ->
+            manager.listOfflineRegions(object : OfflineManager.ListOfflineRegionsCallback {
+                override fun onList(offlineRegions: Array<OfflineRegion>?) = c.resume(offlineRegions?.toList().orEmpty())
+                override fun onError(error: String) = c.resume(emptyList())
+            })
+        }
+    }
+
+    private suspend fun status(r: OfflineRegion): OfflineRegionStatus? = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { c ->
+            r.getStatus(object : OfflineRegion.OfflineRegionStatusCallback {
+                override fun onStatus(status: OfflineRegionStatus?) = c.resume(status)
+                override fun onError(error: String?) = c.resume(null)
+            })
+        }
+    }
+
+    private suspend fun create(def: org.maplibre.android.offline.OfflineRegionDefinition, metadata: ByteArray): OfflineRegion? =
+        withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { c ->
+                manager.createOfflineRegion(def, metadata, object : OfflineManager.CreateOfflineRegionCallback {
+                    override fun onCreate(offlineRegion: OfflineRegion) = c.resume(offlineRegion)
+                    override fun onError(error: String) = c.resume(null)
+                })
+            }
+        }
+
+    private suspend fun delete(r: OfflineRegion) = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { c ->
+            r.delete(object : OfflineRegion.OfflineRegionDeleteCallback {
+                override fun onDelete() = c.resume(Unit)
+                override fun onError(error: String) = c.resume(Unit)
+            })
+        }
+    }
+
+    /** Por capa: cuántas regiones, cuánto ocupan y de cuándo es la más vieja (para Offline y Actualizaciones). */
+    suspend fun saved(): Map<MapLayer, SavedLayer> {
+        val out = HashMap<MapLayer, SavedLayer>()
+        for (r in regions()) {
+            val m = meta(r) ?: continue
+            val bytes = status(r)?.completedResourceSize ?: 0L
+            val prev = out[m.layer]
+            out[m.layer] = SavedLayer((prev?.regions ?: 0) + 1, (prev?.bytes ?: 0L) + bytes,
+                listOfNotNull(prev?.oldest, m.created).minOrNull())
+        }
+        return out
+    }
+
+    /** Lo que ocupa todo (descargas y lo visto). */
+    fun cacheBytes(): Long = File(app.filesDir, "mbgl-offline.db").length()
+
+    /** Borra las descargas de una capa (lo que no use otra región, MapLibre lo puede soltar). */
+    suspend fun purge(layer: MapLayer) { regions().filter { meta(it)?.layer == layer }.forEach { delete(it) } }
+
+    /** Vacía lo visto que no está en ninguna descarga. */
+    suspend fun clearViewed() = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { c ->
+            manager.clearAmbientCache(object : OfflineManager.FileSourceCallback {
+                override fun onSuccess() = c.resume(Unit)
+                override fun onError(message: String) = c.resume(Unit)
+            })
+        }
     }
 
     /**
-     * Cuándo se guardó la tesela más vieja de una capa (su caducidad menos el año que se les da), o
-     * null si no hay. Una ya marcada para renovar (caducidad 0) cuenta como «para renovar»: -1.
+     * Renovar las descargas de una capa: no se borra nada (sin red se siguen viendo); MapLibre da sus
+     * teselas por caducadas y las vuelve a pedir (y sólo baja las que hayan cambiado: el IGN contesta
+     * «no modificada»). Con red, se vuelven a bajar ya.
      */
-    fun oldestSaved(layer: MapLayer): Long? = runCatching { writer.oldestExpiry(sources.getValue(layer).name()) }.getOrNull()
-        ?.let { if (it <= 0) -1 else it - Configuration.getInstance().expirationOverrideDuration!! }
+    suspend fun renew(layer: MapLayer) {
+        for (r in regions().filter { meta(it)?.layer == layer }) {
+            withContext(Dispatchers.Main) {
+                suspendCancellableCoroutine { c ->
+                    r.invalidate(object : OfflineRegion.OfflineRegionInvalidateCallback {
+                        override fun onInvalidate() = c.resume(Unit)
+                        override fun onError(error: String) = c.resume(Unit)
+                    })
+                }
+            }
+        }
+    }
 
-    /**
-     * Renovar los mapas guardados de una capa: no se borra nada (se siguen viendo sin red); cada tesela
-     * se vuelve a bajar al verla con red, o al repetir la descarga de una zona.
-     */
-    fun renew(layer: MapLayer) = runCatching { writer.expireAll(sources.getValue(layer).name()) }
+    // --- Lo de osmdroid (hasta la 0.26.0) ---------------------------------------------------------
 
-    fun countFor(layer: MapLayer): Long = runCatching { writer.getRowCount(sources.getValue(layer).name()) }.getOrDefault(0L)
+    private val oldDir: File get() = File(app.noBackupFilesDir, "osmdroid")
 
-    fun cacheBytes(): Long = cacheDir.listFiles().orEmpty().sumOf { it.length() }
+    /** Lo que ocupan los mapas guardados con la versión anterior (ya no sirven para nada). */
+    fun oldCacheBytes(): Long = oldDir.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
 
-    fun purge(layer: MapLayer) = runCatching { writer.purgeCache(sources.getValue(layer).name()) }
+    fun deleteOldCache() { oldDir.deleteRecursively() }
 
-    // --- Descarga de zonas -------------------------------------------------------------------
+    // --- Descargas --------------------------------------------------------------------------------
 
     private val _download = MutableStateFlow(DownloadState())
     val download: StateFlow<DownloadState> = _download.asStateFlow()
     private var job: Job? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var active: OfflineRegion? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** Por debajo de esto se para: el móvil sin espacio va mal entero. */
     private const val MIN_FREE_BYTES = 256L shl 20
+    /** La caché de lo visto: «sin límite» (Bruno, 27-nov-2026); MapLibre pide un número. */
+    private const val AMBIENT_BYTES = 1L shl 40
 
-    /**
-     * Baja la zona capa a capa y de zoom menor a mayor (si se cancela, lo bajado ya sirve para ver
-     * la zona entera aunque con menos detalle), con 3 peticiones a la vez como ZeroGPS: es un
-     * servicio público. Se salta lo que ya está guardado y sin caducar, así que repetir la misma
-     * descarga reanuda la anterior.
-     */
+    private val pixelRatio get() = app.resources.displayMetrics.density
+
+    /** Una zona de Offline: una región por capa, de [zmin] a [zmax] (o el máximo de cada capa). */
     fun start(box: BBox, zmin: Int, zmax: Int, layers: List<MapLayer>) {
-        if (job?.isActive == true) return
-        val plan = layers.map { l -> l to es.altamirano.gps.core.OfflineZone.plan(box, zmin, zmax, l) }
-        val work = plan.flatMap { (layer, p) ->
-            (p.zmin..p.zmax).map { z ->
-                val tl = MapTiles.tileAt(box.maxLat, box.minLon, z)
-                val br = MapTiles.tileAt(box.minLat, box.maxLon, z)
-                // Perezoso: una zona grande son decenas de miles de teselas.
-                Triple(layer, z, sequence { for (y in tl.y..br.y) for (x in tl.x..br.x) yield(MapTileIndex.getTileIndex(z, x, y)) } to p.perZoom.getValue(z).toInt())
-            }
-        }
-        run(work, route = false, doneMessage = "Zona descargada")
+        val b = box.normalized()
+        val bounds = LatLngBounds.from(b.maxLat, b.maxLon, b.minLat, b.minLon)
+        val key = "%.4f,%.4f,%.4f,%.4f,%d,%d".format(java.util.Locale.ROOT, b.minLat, b.minLon, b.maxLat, b.maxLon, zmin, zmax)
+        run(layers.map { l ->
+            val top = minOf(zmax, l.maxZoom)
+            Triple(l, "zona:$key") { OfflineTilePyramidRegionDefinition(MapStyles.uriOf(l), bounds, zmin.toDouble(), top.toDouble(), pixelRatio) as org.maplibre.android.offline.OfflineRegionDefinition }
+        }, kind = "zona", route = false, doneMessage = "Zona descargada")
     }
 
     /**
-     * Las teselas de un camino (±[marginM]) del mapa [style], de zoom 10 a 17, para tenerlas sin
-     * cobertura más adelante. Si ya hay una descarga en marcha (una zona de Offline), no se pisa.
-     * Devuelve cuántas teselas y lo que ocuparán como mucho, o null si no se empieza.
+     * Los mapas de un camino (±[marginM]), de z10 a z17: el callejero vectorial (el del coche) y, si el
+     * mapa del móvil es otro, también ese. Si ya hay una descarga en marcha, no se pisa.
      */
-    fun startRoute(points: List<es.altamirano.gps.core.TrackPoint>, style: es.altamirano.gps.core.MapStyle,
-                   marginM: Double = 500.0): Pair<Int, Long>? {
-        if (job?.isActive == true || points.size < 2) return null
-        val plan = es.altamirano.gps.core.RouteCorridor.plan(points, marginM, ROUTE_ZMIN, ROUTE_ZMAX, style.layers)
-        val work = plan.map { (layer, tiles) ->
-            val z = tiles.firstOrNull()?.z ?: ROUTE_ZMIN
-            Triple(layer, z, tiles.asSequence().map { MapTileIndex.getTileIndex(it.z, it.x, it.y) } to tiles.size)
+    fun startRoute(points: List<TrackPoint>, phoneStyle: MapStyle, marginM: Double = 500.0) {
+        if (job?.isActive == true || points.size < 2) return
+        val geometry = corridor(points, marginM)
+        val layers = (listOf(MapLayer.VECTOR) + phoneStyle.layers).distinct()
+        val key = "${points.size}:${points.first().lat},${points.first().lon}:${points.last().lat},${points.last().lon}"
+        run(layers.map { l ->
+            Triple(l, "camino:$key") {
+                OfflineGeometryRegionDefinition(MapStyles.uriOf(l), geometry, ROUTE_ZMIN.toDouble(), minOf(ROUTE_ZMAX, l.maxZoom).toDouble(), pixelRatio)
+                    as org.maplibre.android.offline.OfflineRegionDefinition
+            }
+        }, kind = "camino", route = true, doneMessage = "Mapas del camino guardados")
+    }
+
+    /**
+     * La franja de ±[marginM] a lo largo del camino, como cuadrados alrededor de puntos cada medio
+     * margen (MapLibre baja las teselas que tocan alguno). Basta y es mucho más sencillo que un buffer.
+     */
+    internal fun corridor(points: List<TrackPoint>, marginM: Double): MultiPolygon {
+        val squares = ArrayList<Polygon>()
+        var last: TrackPoint? = null
+        val step = marginM / 2
+        fun square(lat: Double, lon: Double) {
+            val dLat = marginM / 111_320.0
+            val dLon = marginM / (111_320.0 * cos(Math.toRadians(lat)))
+            squares += Polygon.fromLngLats(listOf(listOf(
+                Point.fromLngLat(lon - dLon, lat - dLat), Point.fromLngLat(lon + dLon, lat - dLat),
+                Point.fromLngLat(lon + dLon, lat + dLat), Point.fromLngLat(lon - dLon, lat + dLat), Point.fromLngLat(lon - dLon, lat - dLat))))
         }
-        val bytes = plan.sumOf { (layer, tiles) -> tiles.sumOf { layer.estimatedTileBytes(it.z) } }
-        run(work, route = true, doneMessage = "Mapas del camino guardados")
-        return work.sumOf { it.third.second } to bytes
+        for (p in points) {
+            val l = last
+            if (l == null) { square(p.lat, p.lon); last = p; continue }
+            val d = es.altamirano.gps.core.Geo.distanceM(l.lat, l.lon, p.lat, p.lon)
+            if (d < step) continue
+            // Tramos largos (una recta en el campo): puntos intermedios.
+            val n = kotlin.math.ceil(d / step).toInt()
+            for (i in 1..n) square(l.lat + (p.lat - l.lat) * i / n, l.lon + (p.lon - l.lon) * i / n)
+            last = p
+        }
+        return MultiPolygon.fromPolygons(squares)
     }
 
     /** Hay red de verdad (validada: no un wifi sin salida a internet) y el usuario deja usarla. */
@@ -177,103 +282,80 @@ object Tiles {
     }
 
     /** Al empezar a seguir un camino: guardar sus mapas si hay red (y no se está bajando ya otra cosa). */
-    fun saveAlong(context: Context, points: List<es.altamirano.gps.core.TrackPoint>) {
-        if (canUseNetwork(context)) startRoute(points, Prefs(context).style)
+    fun saveAlong(context: Context, points: List<TrackPoint>) {
+        if (canUseNetwork(context)) scope.launch { startRoute(points, Prefs(context).style) }
     }
 
     private const val ROUTE_ZMIN = 10
     private const val ROUTE_ZMAX = 17
+    /** Sin avanzar nada en este tiempo (sin red, el servidor no responde), se para. */
+    private const val STALL_MS = 90_000L
 
     /**
-     * Baja capa a capa y de zoom menor a mayor (si se cancela, lo bajado ya sirve para ver la zona
-     * entera aunque con menos detalle), con 3 peticiones a la vez como ZeroGPS: es un servicio
-     * público. Se salta lo que ya está guardado y sin caducar, así que repetir una descarga la reanuda.
+     * Baja las regiones una detrás de otra. Una que ya exista con la misma clave se reanuda (MapLibre
+     * salta lo que ya tiene). Para si falta espacio o si no avanza en [STALL_MS].
      */
-    private fun run(work: List<Triple<MapLayer, Int, Pair<Sequence<Long>, Int>>>, route: Boolean, doneMessage: String) {
-        val total = work.sumOf { it.third.second }
-        lastError = null
-        _download.value = DownloadState(true, 0, total, route = route)
+    private fun run(work: List<Triple<MapLayer, String, () -> org.maplibre.android.offline.OfflineRegionDefinition>>,
+                    kind: String, route: Boolean, doneMessage: String) {
+        if (job?.isActive == true) return
+        _download.value = DownloadState(true, route = route)
         job = scope.launch {
-            val done = AtomicInteger(0)
-            val failed = AtomicInteger(0)
             var stopped: String? = null
-            for ((layer, _, tilesAndCount) in work) {
-                val (tiles, count) = tilesAndCount
-                val src = sources.getValue(layer)
+            var failed = 0
+            var doneBefore = 0
+            var totalBefore = 0
+            val existing = regions()
+            for ((layer, key, def) in work) {
                 if (cacheDir.usableSpace < MIN_FREE_BYTES) { stopped = "Parada: queda poco espacio libre"; break }
-                val before = failed.get()
-                val queue = Channel<Long>(64)
-                coroutineScope {
-                    repeat(3) {
-                        launch {
-                            for (index in queue) {
-                                if (!fetch(src, index)) failed.incrementAndGet()
-                                val d = done.incrementAndGet()
-                                if (d % 8 == 0) _download.value = _download.value.copy(done = d, failed = failed.get(), layer = layer)
-                            }
-                        }
+                val region = existing.firstOrNull { meta(it)?.let { m -> m.layer == layer && m.key == key } == true }
+                    ?: create(def(), metaBytes(layer, kind, key))
+                if (region == null) { stopped = "No se pudo preparar la descarga"; break }
+                active = region
+                val finished = CompletableDeferred<Unit>()
+                var lastProgress = System.currentTimeMillis()
+                var lastDone = -1L
+                region.setObserver(object : OfflineRegion.OfflineRegionObserver {
+                    override fun onStatusChanged(status: OfflineRegionStatus) {
+                        if (status.completedResourceCount != lastDone) { lastDone = status.completedResourceCount; lastProgress = System.currentTimeMillis() }
+                        _download.value = _download.value.copy(done = doneBefore + status.completedResourceCount.toInt(),
+                            total = totalBefore + status.requiredResourceCount.toInt(), failed = failed, layer = layer)
+                        if (status.isComplete) finished.complete(Unit)
                     }
-                    for (index in tiles) {
-                        if (!isActive) break
-                        queue.send(index)
-                    }
-                    queue.close()
+                    override fun onError(error: OfflineRegionError) { failed++; lastError = error.message }
+                    override fun mapboxTileCountLimitExceeded(limit: Long) { stopped = "Demasiadas teselas"; finished.complete(Unit) }
+                })
+                region.setDownloadState(OfflineRegion.STATE_ACTIVE)
+                // Esperar a que acabe, vigilando que avance y el espacio.
+                while (!finished.isCompleted) {
+                    withTimeoutOrNull(2000) { finished.await() }
+                    if (System.currentTimeMillis() - lastProgress > STALL_MS) { stopped = "Parada: el IGN no responde (¿sin conexión?)"; break }
+                    if (cacheDir.usableSpace < MIN_FREE_BYTES) { stopped = "Parada: queda poco espacio libre"; break }
                 }
-                // Un zoom entero sin una sola tesela buena: sin red o el IGN no responde.
-                if (count >= 8 && failed.get() - before >= count) { stopped = "Parada: el IGN no responde (¿sin conexión?)"; break }
+                region.setDownloadState(OfflineRegion.STATE_INACTIVE)
+                region.setObserver(null)
+                active = null
+                val st = status(region)
+                doneBefore += st?.completedResourceCount?.toInt() ?: 0
+                totalBefore += st?.requiredResourceCount?.toInt() ?: 0
+                if (stopped != null) break
             }
-            val f = failed.get()
             val why = lastError?.let { " Último error: $it." } ?: ""
-            _download.value = DownloadState(false, done.get(), total, f, null,
-                (stopped?.let { "$it.$why" }) ?: if (f == 0) doneMessage else "Descargada con $f teselas que fallaron (repite la descarga para reintentarlas).$why",
-                route = route)
+            _download.value = DownloadState(false, doneBefore, totalBefore, failed, null,
+                stopped?.let { "$it.$why" } ?: doneMessage, route = route)
+            lastError = null
         }
     }
 
     fun cancel() {
         val j = job ?: return
+        active?.let { it.setDownloadState(OfflineRegion.STATE_INACTIVE); it.setObserver(null) }
+        active = null
         j.cancel()
         _download.value = _download.value.copy(running = false, message = "Cancelada: lo bajado se queda; repite para seguir")
     }
 
-    /** Un JPEG empieza por FF D8; un PNG, por 89 50 4E 47 ("\u0089PNG"). */
-    internal fun looksLikeImage(b: ByteArray, png: Boolean): Boolean =
-        if (png) b.size >= 4 && b[0] == 0x89.toByte() && b[1] == 'P'.code.toByte() && b[2] == 'N'.code.toByte() && b[3] == 'G'.code.toByte()
-        else b.size >= 2 && b[0] == 0xFF.toByte() && b[1] == 0xD8.toByte()
-
-    /** El motivo del último fallo, para enseñarlo (y para el registro). */
     @Volatile private var lastError: String? = null
 
-    /** true si la tesela ya estaba o se bajó bien. */
-    private fun fetch(src: IgnTileSource, index: Long): Boolean {
-        val exp = writer.getExpirationTimestamp(src, index)
-        if (exp != null && exp > System.currentTimeMillis()) return true
-        val error: String? = try {
-            val c = URL(src.getTileURLString(index)).openConnection() as HttpURLConnection
-            c.connectTimeout = 15_000; c.readTimeout = 20_000
-            c.setRequestProperty("User-Agent", Configuration.getInstance().userAgentValue)
-            try {
-                if (c.responseCode != 200) "HTTP ${c.responseCode}"
-                else {
-                    val bytes = c.inputStream.use { it.readBytes() }
-                    // El IGN contesta a veces errores de WMTS en XML con un 200: se mira la firma.
-                    if (!looksLikeImage(bytes, src.layer.png)) "no es una imagen"
-                    else {
-                        val expires = System.currentTimeMillis() + Configuration.getInstance().expirationOverrideDuration!!
-                        // saveFile de osmdroid 6.1.20 devuelve siempre false, aunque guarde (su
-                        // bytecode acaba en `iconst_0`): se comprueba mirando si está.
-                        writer.saveFile(src, index, bytes.inputStream(), expires)
-                        if (writer.exists(src, index)) null else "no se pudo guardar"
-                    }
-                }
-            } finally { c.disconnect() }
-        } catch (e: Exception) {
-            e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
-        }
-        if (error != null) {
-            lastError = error
-            android.util.Log.w("GpsDroid", "Tesela ${MapTileIndex.toString(index)}: $error")
-        }
-        return error == null
-    }
+    /** Para las pruebas o el registro: espera a que acabe la descarga en marcha. */
+    internal suspend fun awaitIdle() { while (job?.isActive == true) delay(500) }
 }

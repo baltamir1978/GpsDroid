@@ -62,7 +62,7 @@ import kotlin.math.roundToInt
  * distancia y hacia dónde queda.
  */
 class MapCarScreen(car: CarContext) : Screen(car) {
-    private val renderer = CarMapRenderer(car)
+    private val renderer = CarMapRenderer(car, car.isDarkMode)
     /** Lo que enseña la tarjeta; sólo se rehace la plantilla si cambia (el coche limita los refrescos). */
     private var card: Card? = null
     private var recording = Recording.state.value.active

@@ -13,8 +13,8 @@ android {
         applicationId = "es.altamirano.gps"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 41
-        versionName = "0.26.0"
+        versionCode = 42
+        versionName = "0.27.0"
     }
 
     // La clave de release vive fuera del repositorio; sin ella la release sale sin firmar.
@@ -63,7 +63,6 @@ dependencies {
     implementation(libs.compose.icons.extended)
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.coroutines.android)
-    implementation(libs.osmdroid)
     implementation(libs.brouter.core)   // rutas sin conexión, dentro de la app
     implementation(libs.car.app)
     implementation(libs.maplibre)      // mapa vectorial del IGN en el coche

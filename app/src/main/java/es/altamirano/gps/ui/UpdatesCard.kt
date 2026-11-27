@@ -83,8 +83,9 @@ internal fun UpdatesCard(online: Boolean) {
     val radarsLocal = remember(stamp) { Radars.updatedAt(context) }
     val redLocal = remember(stamp) { Radars.redLightsUpdatedAt(context) }
     // La base de datos de teselas, fuera del hilo de la pantalla.
-    val layers by produceState(emptyList<Triple<MapLayer, Long, Long?>>(), stamp) {
-        value = withContext(Dispatchers.IO) { MapLayer.entries.map { Triple(it, Tiles.countFor(it), Tiles.oldestSaved(it)) }.filter { it.second > 0 } }
+    val layers by produceState(emptyList<Pair<MapLayer, es.altamirano.gps.data.SavedLayer>>(), stamp) {
+        Tiles.ensureMapLibre(context)
+        value = Tiles.saved().toList().sortedBy { it.first.ordinal }
     }
 
     fun run(id: String, block: suspend () -> String?) {
@@ -144,21 +145,19 @@ internal fun UpdatesCard(online: Boolean) {
             enabled = online && !routesRunning,
         ) { DataUpdateWorker.updateRoutesNow(context) }
 
-        // Mapas guardados: el IGN no dice si una tesela ha cambiado.
+        // Mapas descargados: MapLibre pregunta al IGN por cada tesela al verla con red (y sólo baja las cambiadas).
         UpdateRow(
-            title = "Mapas guardados",
+            title = "Mapas descargados",
             detail = if (layers.isEmpty()) "Ninguno todavía"
-            else layers.joinToString("\n") { (l, n, oldest) ->
-                "${l.label}: ${OfflineZone.formatCount(n)} teselas · " +
-                    (if (oldest == -1L) "se renuevan al verlas con red" else oldest?.let { "las más viejas, del ${shortDate(it)}" } ?: "")
-            } + "\nEl IGN no dice si un mapa ha cambiado: se renuevan solos al cumplir un año.",
+            else layers.joinToString("\n") { (l, sv) ->
+                "${l.label}: ${sv.regions} ${if (sv.regions == 1) "descarga" else "descargas"} · ${OfflineZone.formatBytes(sv.bytes)}" +
+                    (sv.oldest?.let { " · la más vieja, del ${shortDate(it)}" } ?: "")
+            } + "\nAl verlos con red se comprueba si han cambiado; «Renovar» vuelve a mirarlos todos.",
             isNew = false,
             button = null,
             enabled = false,
         ) {}
-        layers.forEach { (l, _, oldest) ->
-            if (oldest != -1L) TextButton(onClick = { renewLayer = l }) { Text("Renovar ${l.label}") }
-        }
+        layers.forEach { (l, _) -> TextButton(onClick = { renewLayer = l }) { Text("Renovar ${l.label}") } }
 
         if (checking) Text("Buscando novedades…", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         message?.let { Text(it, fontSize = 13.sp) }
@@ -174,11 +173,11 @@ internal fun UpdatesCard(online: Boolean) {
     renewLayer?.let { l ->
         AlertDialog(onDismissRequest = { renewLayer = null },
             title = { Text("¿Renovar ${l.label}?") },
-            text = { Text("No se borra nada: sin red se siguen viendo. Cada tesela se vuelve a bajar del IGN al verla con red, " +
-                "o al repetir la descarga de una zona (gasta lo mismo que la primera vez).") },
+            text = { Text("No se borra nada: sin red se siguen viendo. Se comprueba con el IGN cada tesela al verla con red o al " +
+                "repetir la descarga de una zona, y sólo se bajan las que hayan cambiado.") },
             confirmButton = { TextButton(onClick = {
                 val layer = l; renewLayer = null
-                run("mapas") { withContext(Dispatchers.IO) { Tiles.renew(layer) }; "Marcadas para renovar" }
+                run("mapas") { Tiles.renew(layer); "Marcadas para renovar" }
             }) { Text("Renovar") } },
             dismissButton = { TextButton(onClick = { renewLayer = null }) { Text("Cancelar") } })
     }
