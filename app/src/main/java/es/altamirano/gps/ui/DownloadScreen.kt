@@ -161,15 +161,16 @@ fun DownloadScreen() {
                 if (dl.running) {
                     Text((if (dl.route) "Guardando los mapas del camino" else "Descargando") + (dl.layer?.let { " · ${it.label}" } ?: ""), fontWeight = FontWeight.Bold)
                     LinearWavyProgressIndicator(progress = { if (dl.total > 0) dl.done.toFloat() / dl.total else 0f }, Modifier.fillMaxWidth().height(14.dp))
-                    Text("${OfflineZone.formatCount(dl.done.toLong())} de ${OfflineZone.formatCount(dl.total.toLong())} archivos" +
+                    // Al empezar MapLibre sólo conoce el estilo («1»): el total crece al leerlo.
+                    Text(OfflineZone.formatBytes(dl.bytes) + (if (dl.total > 1) " · ${dl.done * 100 / dl.total} %" else " · empezando…") +
                         if (dl.failed > 0) " · ${dl.failed} fallos" else "", fontSize = 14.sp)
                     Text("Mantén la app abierta hasta que acabe.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(onClick = { Tiles.cancel() }) { Text("Cancelar") }
                 } else {
                     Text(OfflineZone.formatBytes(bytes), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                    Text("${OfflineZone.formatCount(tiles)} teselas (aprox.)", fontWeight = FontWeight.Medium)
+                    Text("aproximadamente", fontWeight = FontWeight.Medium)
                     Text("Libre en el móvil: ${OfflineZone.formatBytes(free)}", fontSize = 14.sp)
-                    if (tooMany) Text("Pasa del tope de ${OfflineZone.formatCount(OfflineZone.MAX_TILES)} teselas por descarga: baja el zoom máximo o el radio. (El IGN es un servicio público: nada de bajarlo entero.)",
+                    if (tooMany) Text("Demasiado para una sola descarga: baja el zoom máximo o el radio. (El IGN es un servicio público: nada de bajarlo entero.)",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     if (bytes > free) Text("No cabe.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     dl.message?.let { Text(it, fontSize = 13.sp) }

@@ -112,7 +112,7 @@ internal fun RouteTilesLine() {
     val dl by es.altamirano.gps.data.Tiles.download.collectAsState()
     if (!dl.route) return
     val text = when {
-        dl.running && dl.total > 0 -> "Guardando mapas del camino: ${dl.done * 100 / dl.total} %"
+        dl.running && dl.total > 1 -> "Guardando mapas del camino: ${dl.done * 100 / dl.total} %"
         dl.running -> "Guardando mapas del camino…"
         else -> return
     }

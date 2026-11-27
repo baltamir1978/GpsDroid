@@ -1,0 +1,5 @@
+{"version": 8, "name": "Satélite", "glyphs": "https://vt-mapabase.idee.es/files/styles/fonts/pbf/{fontstack}/{range}.pbf",
+ "sources": {"ign-pnoa": {"type": "raster", "tiles": ["https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&layer=OI.OrthoimageCoverage&style=default&format=image/jpeg&tilematrixset=GoogleMapsCompatible&tilematrix={z}&tilerow={y}&tilecol={x}"], "tileSize": 256,
+                     "minzoom": 0, "maxzoom": 19, "attribution": "© Instituto Geográfico Nacional de España"}},
+ "layers": [{"id": "fondo", "type": "background", "paint": {"background-color": "#5a6250"}},
+            {"id": "ign-pnoa", "type": "raster", "source": "ign-pnoa"}]}

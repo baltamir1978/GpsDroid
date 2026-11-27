@@ -1,0 +1,5 @@
+{"version": 8, "name": "Topográfico", "glyphs": "https://vt-mapabase.idee.es/files/styles/fonts/pbf/{fontstack}/{range}.pbf",
+ "sources": {"ign-topo": {"type": "raster", "tiles": ["https://www.ign.es/wmts/mapa-raster?service=WMTS&request=GetTile&version=1.0.0&layer=MTN&style=default&format=image/jpeg&tilematrixset=GoogleMapsCompatible&tilematrix={z}&tilerow={y}&tilecol={x}"], "tileSize": 256,
+                     "minzoom": 0, "maxzoom": 17, "attribution": "© Instituto Geográfico Nacional de España"}},
+ "layers": [{"id": "fondo", "type": "background", "paint": {"background-color": "#ece9df"}},
+            {"id": "ign-topo", "type": "raster", "source": "ign-topo"}]}

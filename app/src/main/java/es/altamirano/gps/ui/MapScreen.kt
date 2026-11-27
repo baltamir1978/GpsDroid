@@ -272,7 +272,12 @@ fun MapScreen() {
     LaunchedEffect(Unit) { while (true) { delay(5000); layers.setPosition(Gps.location.value, prefs.last) } }
     LaunchedEffect(follow, map) {
         val loc = location
-        if (follow && loc != null && map != null) moveTo(loc.latitude, loc.longitude, if (zoom < 14) 15.0 else null)
+        val m = map
+        if (!follow || loc == null || m == null) return@LaunchedEffect
+        // Muy alejado: a z15 de golpe. Con animación, la posición siguiente (cada segundo, con su propia
+        // animación) la cortaba y el mapa se quedaba lejos (Bruno, 27-nov-2026).
+        if (zoom < 14) m.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 15.0 - 1))
+        else moveTo(loc.latitude, loc.longitude)
     }
     LaunchedEffect(rec.points) { layers.setRecording(rec.points) }
     LaunchedEffect(opened) { layers.setOpened(opened?.points.orEmpty()) }
@@ -283,15 +288,17 @@ fun MapScreen() {
     // Todas las rutas posibles a la vez: la elegida, fuerte; las otras, claras y se eligen tocándolas.
     LaunchedEffect(preview?.options, preview?.selected) { layers.setPreview(preview) }
     // La ruta en vista previa, entera (con tu posición, que es donde empieza).
+    // Se lee el valor de ahora y no el recogido: el aviso de encuadrar puede llegar a la pantalla antes que
+    // la ruta (con osmdroid funcionaba de rebote porque encuadraba un instante después, con `post`).
     LaunchedEffect(previewFit, map) {
-        val pts = preview?.current?.route?.points ?: return@LaunchedEffect
+        val pts = RoutePreview.state.value?.current?.route?.points ?: return@LaunchedEffect
         if (previewFit == 0 || pts.size < 2 || map == null) return@LaunchedEffect
         follow = false
         fitTo(pts.map { it.lat to it.lon }, bottomExtra = true)
     }
     // Al empezar a seguir: el track entero y tu posición, si estás cerca.
     LaunchedEffect(followFit, map) {
-        val pts = following?.route?.points ?: return@LaunchedEffect
+        val pts = Following.state.value?.route?.points ?: return@LaunchedEffect
         if (followFit == 0 || pts.isEmpty() || map == null) return@LaunchedEffect
         follow = false
         val geo = pts.map { it.lat to it.lon }.toMutableList()
@@ -303,13 +310,13 @@ fun MapScreen() {
     LaunchedEffect(points, target) { layers.setPoints(points, target) }
     // «Ver en el mapa» desde la lista de puntos.
     LaunchedEffect(focus, map) {
-        val w = focus.point ?: return@LaunchedEffect
+        val w = Waypoints.focus.value.point ?: return@LaunchedEffect
         if (map == null) return@LaunchedEffect
         follow = false
         moveTo(w.lat, w.lon, maxOf(zoom, 15.0))
     }
     LaunchedEffect(fit, map) {
-        val pts = opened?.points ?: return@LaunchedEffect
+        val pts = Tracks.opened.value?.points ?: return@LaunchedEffect
         if (pts.isEmpty() || map == null) return@LaunchedEffect
         follow = false
         fitTo(pts.map { it.lat to it.lon })

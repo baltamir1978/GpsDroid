@@ -42,6 +42,8 @@ data class DownloadState(
     val done: Int = 0,          // recursos ya bajados o ya guardados (teselas, y el estilo, letras e iconos)
     val total: Int = 0,
     val failed: Int = 0,
+    /** Lo bajado, en bytes (lo que se enseña, con el porcentaje). */
+    val bytes: Long = 0,
     val layer: MapLayer? = null,
     val message: String? = null, // al acabar: resumen o motivo de la parada
     /** Los mapas del camino que se sigue (no una zona elegida en Offline). */
@@ -224,7 +226,7 @@ object Tiles {
         val key = "%.4f,%.4f,%.4f,%.4f,%d,%d".format(java.util.Locale.ROOT, b.minLat, b.minLon, b.maxLat, b.maxLon, zmin, zmax)
         run(layers.map { l ->
             val top = minOf(zmax, l.maxZoom)
-            Triple(l, "zona:$key") { OfflineTilePyramidRegionDefinition(MapStyles.uriOf(l), bounds, zmin.toDouble(), top.toDouble(), pixelRatio) as org.maplibre.android.offline.OfflineRegionDefinition }
+            Triple(l, "zona:$key") { OfflineTilePyramidRegionDefinition(MapStyles.downloadUriOf(l), bounds, zmin.toDouble(), top.toDouble(), pixelRatio) as org.maplibre.android.offline.OfflineRegionDefinition }
         }, kind = "zona", route = false, doneMessage = "Zona descargada")
     }
 
@@ -239,7 +241,7 @@ object Tiles {
         val key = "${points.size}:${points.first().lat},${points.first().lon}:${points.last().lat},${points.last().lon}"
         run(layers.map { l ->
             Triple(l, "camino:$key") {
-                OfflineGeometryRegionDefinition(MapStyles.uriOf(l), geometry, ROUTE_ZMIN.toDouble(), minOf(ROUTE_ZMAX, l.maxZoom).toDouble(), pixelRatio)
+                OfflineGeometryRegionDefinition(MapStyles.downloadUriOf(l), geometry, ROUTE_ZMIN.toDouble(), minOf(ROUTE_ZMAX, l.maxZoom).toDouble(), pixelRatio)
                     as org.maplibre.android.offline.OfflineRegionDefinition
             }
         }, kind = "camino", route = true, doneMessage = "Mapas del camino guardados")
@@ -304,6 +306,7 @@ object Tiles {
             var failed = 0
             var doneBefore = 0
             var totalBefore = 0
+            var bytesBefore = 0L
             val existing = regions()
             for ((layer, key, def) in work) {
                 if (cacheDir.usableSpace < MIN_FREE_BYTES) { stopped = "Parada: queda poco espacio libre"; break }
@@ -318,7 +321,8 @@ object Tiles {
                     override fun onStatusChanged(status: OfflineRegionStatus) {
                         if (status.completedResourceCount != lastDone) { lastDone = status.completedResourceCount; lastProgress = System.currentTimeMillis() }
                         _download.value = _download.value.copy(done = doneBefore + status.completedResourceCount.toInt(),
-                            total = totalBefore + status.requiredResourceCount.toInt(), failed = failed, layer = layer)
+                            total = totalBefore + status.requiredResourceCount.toInt(), failed = failed, layer = layer,
+                            bytes = bytesBefore + status.completedResourceSize)
                         if (status.isComplete) finished.complete(Unit)
                     }
                     override fun onError(error: OfflineRegionError) { failed++; lastError = error.message }
@@ -337,10 +341,11 @@ object Tiles {
                 val st = status(region)
                 doneBefore += st?.completedResourceCount?.toInt() ?: 0
                 totalBefore += st?.requiredResourceCount?.toInt() ?: 0
+                bytesBefore += st?.completedResourceSize ?: 0L
                 if (stopped != null) break
             }
             val why = lastError?.let { " Último error: $it." } ?: ""
-            _download.value = DownloadState(false, doneBefore, totalBefore, failed, null,
+            _download.value = DownloadState(false, doneBefore, totalBefore, failed, bytesBefore, null,
                 stopped?.let { "$it.$why" } ?: doneMessage, route = route)
             lastError = null
         }

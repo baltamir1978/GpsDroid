@@ -30,8 +30,18 @@ object MapStyles {
         MapLayer.entries.filter { it.raster }.forEach { File(dir, "${it.key}.json").writeText(rasterStyleJson(it)) }
     }
 
-    /** La URL del estilo de una capa: el del CNIG para el vectorial, el fichero propio para las imágenes. */
+    /** La URL del estilo de una capa para pintarla: el del CNIG para el vectorial, el fichero propio para las imágenes. */
     fun uriOf(layer: MapLayer): String = if (layer.raster) "file://" + File(dir, "${layer.key}.json").absolutePath else MapLayer.VECTOR_STYLE_URL
+
+    /**
+     * La URL del estilo para las descargas: el descargador de MapLibre sólo pide los estilos por HTTP
+     * (con `file://` se quedaba en «0 de 1»: «Unable to parse resourceUrl»). Los de las imágenes están
+     * publicados en el repositorio (`estilos/<capa>.json`, iguales a [rasterStyleJson]: lo vigila
+     * `EstilosTest`); las teselas se guardan por su URL, así que sirven al pintar con el fichero local.
+     */
+    fun downloadUriOf(layer: MapLayer): String = if (layer.raster) "$PUBLISHED/${layer.key}.json" else MapLayer.VECTOR_STYLE_URL
+
+    private const val PUBLISHED = "https://raw.githubusercontent.com/baltamir1978/GpsDroid/main/estilos"
 
     internal fun rasterStyleJson(layer: MapLayer): String {
         val id = "ign-${layer.key}"
