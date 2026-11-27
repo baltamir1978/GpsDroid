@@ -36,6 +36,25 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.18.0 (27-nov-2026): buscar un sitio y llevar allí la ruta.** Bruno, de la lista de pendientes («ruta
+desde una pulsación larga en el mapa»): «mejor desde la lupa». Y confirma que **los radares (pitido,
+iconos de radar y semáforo, descarga, ajustes) y todo Android Auto de la 0.11–0.17 van bien** (27-nov-2026).
+- `core/Places.kt`: `PlaceSearch` sobre **Photon** (`photon.komoot.io/api`, buscador libre sobre
+  OpenStreetMap, sin clave, pensado para buscar mientras se escribe; se le pasa la posición para que lo
+  cercano salga antes). `parsePhoton` lee el GeoJSON (nombre, o calle y número, o pueblo; detalle con
+  calle, pueblo y provincia; quita repetidos a menos de 50 m). `Place.toWaypoint()` con id negativo:
+  la ruta y la flecha funcionan igual que con un punto guardado, sin guardarlo. 3 pruebas
+  (`PlacesTest`, con una respuesta real en `src/test/resources/photon-muestra.json`).
+- `data/Places.search`: sólo con «Usar la red» y red validada; dice por qué no si no.
+- Android Auto: la lupa abre la lista de puntos, que ahora empieza por «Buscar un sitio…»
+  (`PlaceSearchCarScreen`, `SearchTemplate`; medio segundo de espera al escribir; distancia con
+  `DistanceSpan`). Tocar un resultado = lo mismo que tocar un punto (ruta en coche y elegir entre las
+  alternativas). El teclado del coche sólo va parado (lo bloquea Android Auto).
+- Móvil: lupa (botón pequeño) junto al de guardar punto → hoja de búsqueda (`PlaceSearchSheet`) →
+  ficha del sitio (`PlaceSheet`): «Ruta hasta aquí» (el mismo `RouteToButton`), «Ir hacia aquí», «Ver
+  en el mapa» y «Guardar como punto».
+- **Probado en el emulador** (móvil, release): «mercadona segovia» desde La Granja → 4 resultados con distancia, ficha, «Ruta hasta aquí» en coche → 2 rutas (18 min · 10 km y 22 min · 12,4 km). **Sin probar** en el móvil ni en Android Auto (no hay DHU).
+
 **0.17.1 (27-nov-2026): arreglos de Android Auto.** Bruno: «cuando intenta calcular una ruta en coche
 desde Android Auto, da un error y se cierra»; «el zoom por defecto es demasiado cerca»; «el icono de
 puntos para seleccionar destino debería ser una lupa».

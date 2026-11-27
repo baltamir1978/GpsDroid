@@ -42,6 +42,9 @@ ubicación por red ni servicios de Google.
   salen todos, los más cerca primero, con su **altitud** y cuánto hay que subir o bajar desde donde
   estás («Altitud 1.245 m · 230 m más arriba»); se comparten en un GPX; al importar un GPX con puntos
   (`<wpt>`) se añaden.
+- **Buscar un sitio** (la lupa, en el móvil y en Android Auto): dirección, pueblo, negocio o monte, con
+  el buscador libre Photon (datos de OpenStreetMap; hace falta red). Desde el resultado, ruta hasta allí,
+  ir hacia allí o guardarlo como punto.
 - **Rutas** («Ruta hasta aquí» en la ficha de un punto): a pie, en bici o en coche, por caminos y
   carreteras, calculadas **sin conexión** dentro de la app con el motor de
   [BRouter](https://github.com/abrensch/brouter) y los datos de OpenStreetMap. La primera vez en una

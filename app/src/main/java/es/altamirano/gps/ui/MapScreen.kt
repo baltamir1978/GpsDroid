@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.LocationSearching
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -298,6 +299,8 @@ fun MapScreen() {
         }
     }
 
+    var searchOpen by remember { mutableStateOf(false) }
+    var foundPlace by remember { mutableStateOf<es.altamirano.gps.core.Place?>(null) }
     val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Recording.start(context) }
     // Empezar la ruta de la vista previa: las indicaciones y avisos van también por notificación.
     val startRoute = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -374,6 +377,12 @@ fun MapScreen() {
                     }
                     androidx.compose.foundation.layout.Spacer(Modifier.size(12.dp))
                 }
+                // La lupa: buscar un sitio por nombre o dirección y llevar allí la ruta.
+                SmallFloatingActionButton(onClick = { searchOpen = true },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
+                    Icon(Icons.Filled.Search, "Buscar un sitio")
+                }
+                androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
                 SmallFloatingActionButton(onClick = {
                     val loc = location
                     if (loc == null || !Gps.isFresh(loc)) Toast.makeText(context, "Todavía no hay posición del GPS", Toast.LENGTH_SHORT).show()
@@ -423,6 +432,14 @@ fun MapScreen() {
             Waypoints.add(name, g.latitude, g.longitude, newPointEle)
             newPoint = null
         }
+    }
+    if (searchOpen) PlaceSearchSheet(location, onDismiss = { searchOpen = false }) { p -> searchOpen = false; foundPlace = p }
+    foundPlace?.let { p ->
+        PlaceSheet(p, location, onDismiss = { foundPlace = null }, onShowOnMap = {
+            follow = false
+            mapView.controller.animateTo(GeoPoint(p.lat, p.lon), maxOf(mapView.zoomLevelDouble, 15.0), null)
+            foundPlace = null
+        })
     }
     selected?.let { w ->
         // Puede haber cambiado (renombrado) o desaparecido mientras está abierta.

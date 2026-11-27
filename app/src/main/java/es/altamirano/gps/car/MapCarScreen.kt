@@ -364,6 +364,11 @@ class PointsCarScreen(car: CarContext, private val onHeadingUp: (Boolean) -> Uni
             }.build())
             n++
         }
+        // Buscar cualquier sitio (no sólo los puntos guardados) y llevar allí la ruta.
+        list.addItem(Row.Builder().setTitle("Buscar un sitio…").addText("Dirección, pueblo, negocio, monte…")
+            .setImage(CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.car_search)).build())
+            .setOnClickListener { screenManager.push(PlaceSearchCarScreen(carContext) { p -> onPick(p.toWaypoint()) }) }.build())
+        n++
         val sorted = if (loc == null) Waypoints.list.value.sortedBy { it.name.lowercase() }
             else Waypoints.list.value.sortedBy { Geo.distanceM(loc.latitude, loc.longitude, it.lat, it.lon) }
         for (w in sorted.take((limit - n).coerceAtLeast(0))) {
