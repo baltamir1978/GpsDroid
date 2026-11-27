@@ -81,7 +81,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         val p = Presentation(car, vd.display)
         val ctx = p.context
         val density = container.dpi / 160f
-        val sc = MapScene(ctx, density)
+        val sc = MapScene(ctx, density, carMode = true)
         val m = MapView(ctx).apply {
             isTilesScaledToDpi = true
             setMultiTouchControls(false)
@@ -112,10 +112,15 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         applyVisibleArea(visibleArea)
     }
 
-    /** El centro del mapa (donde estás, si se sigue) en el centro de lo que no tapan las tarjetas del coche. */
+    /**
+     * El centro del mapa (donde estás, si se sigue) en lo que no tapan las tarjetas del coche: en el
+     * centro con el norte arriba y, con la dirección de la marcha arriba, más abajo (a [HEADING_UP_Y]
+     * del alto), como los navegadores, para ver más carretera por delante que por detrás.
+     */
     private fun applyVisibleArea(r: Rect) {
         val m = map ?: return
-        m.setMapCenterOffset(r.centerX() - size.first / 2, r.centerY() - size.second / 2)
+        val y = if (prefs.carHeadingUp) r.top + (r.height() * HEADING_UP_Y).toInt() else r.centerY()
+        m.setMapCenterOffset(r.centerX() - size.first / 2, y - size.second / 2)
         recenter()
     }
 
@@ -221,7 +226,8 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     fun setHeadingUp(on: Boolean) {
         prefs.carHeadingUp = on
         if (!on) map?.mapOrientation = 0f
-        recenter(); map?.invalidate()
+        visible?.let { applyVisibleArea(it) } ?: recenter()
+        map?.invalidate()
     }
 
     fun release() {
@@ -239,5 +245,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         const val START_ZOOM = 14.0
         /** 2 m/s, unos 7 km/h. */
         const val HEADING_UP_MIN_SPEED = 2f
+        /** Altura del coche en lo visible con la dirección arriba (0 arriba, 1 abajo). */
+        const val HEADING_UP_Y = 0.7f
     }
 }

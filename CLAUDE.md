@@ -36,6 +36,21 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.23.0 (27-nov-2026): Android Auto con más pinta de navegador.** Bruno mandó fotos del coche
+(«funciona bastante bien», pero hay cosas de la interfaz que mejorar). Lo que se veía y lo cambiado:
+- La flecha de la maniobra era la flecha suelta girada (la de `arrow()`), que parecía el cursor de
+  posición. Ahora `maneuverIcon`: tallo desde abajo doblado hacia el giro con punta, giro en U, rotonda
+  con anillo y salida (con el signo del ángulo de BRouter: negativo a la izquierda, comprobado en
+  `VoiceHint.calcCommand` de brouter-core 1.7.9) y bandera de destino. El lado sale del tipo; el ángulo
+  sólo dice cuánto, acotado al tipo. La flecha suelta sigue para el destino sin ruta y fuera del track.
+- Debajo de la maniobra, `setDestinationTravelEstimate`: llegada, tiempo y km que quedan (sólo cuando
+  `remainingS` ya se sabe; redondeados a 100 m y al minuto para no rehacer la plantilla).
+- `MapScene(carMode = true)`: ruta 1,7× más gruesa con borde blanco debajo (sobre el IGN claro apenas
+  se veía) y, en marcha, la flecha de navegador grande con borde blanco en vez del punto azul.
+- Con la dirección de la marcha arriba, el coche al 70 % del alto de lo visible (`HEADING_UP_Y`), no en
+  el centro.
+- **Sin probar en el coche** (no hay forma aquí); los iconos, revisados dibujándolos aparte.
+
 **0.22.0 (27-nov-2026, en Play —prueba interna— el mismo día): el portal de tu municipio, primero.** Bruno: «si meto Eduardo Dato 11, me
 muestra el primero en Campanario (Badajoz), no el Paseo de Eduardo Dato en Madrid». CartoCiudad sólo
 devuelve unos seis resultados y no por cercanía: para «eduardo dato 11» da seis pueblos con esa calle y

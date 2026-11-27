@@ -31,6 +31,7 @@ import androidx.car.app.navigation.model.Maneuver
 import es.altamirano.gps.core.Maneuver.Kind as MKind
 import androidx.car.app.model.Distance
 import androidx.car.app.navigation.model.NavigationTemplate
+import androidx.car.app.navigation.model.TravelEstimate
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -71,7 +72,9 @@ class MapCarScreen(car: CarContext) : Screen(car) {
 
     /** La maniobra de una ruta, con la distancia ya redondeada (para no rehacer la plantilla a cada metro). */
     private data class StepCard(val kind: MKind, val exit: Int, val angle: Int, val distanceM: Int,
-                                val cue: String, val then: String?)
+                                val cue: String, val then: String?,
+                                /** Lo que queda hasta el destino (a 100 m) y en segundos (al minuto), para la línea de abajo. */
+                                val remainingM: Int = 0, val remainingS: Long? = null)
 
     /** Se le ha dicho al coche que estamos navegando (para el cuadro de instrumentos y su botón de parar). */
     private var navigating = false
@@ -150,7 +153,8 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                 // Un radar a la vista va en la misma tarjeta, detrás de la maniobra (a 50 m: no rehacerla a cada metro).
                 val radar = fol.radar?.let { r -> " · " + r.copy(distanceM = (r.distanceM / 50).roundToInt() * 50.0).line() } ?: ""
                 return Card(next.maneuver.title(), Following.remainingText(f.copy(remainingM = (f.remainingM / 100).roundToInt() * 100.0)),
-                    null, StepCard(next.maneuver.kind, next.maneuver.exit, next.maneuver.angle, d, next.maneuver.title() + radar, next.then?.title()))
+                    null, StepCard(next.maneuver.kind, next.maneuver.exit, next.maneuver.angle, d, next.maneuver.title() + radar, next.then?.title(),
+                        (f.remainingM / 100).roundToInt() * 100, f.remainingS?.let { (it + 30) / 60 * 60 }))
             }
             return followCard(fol, fresh, recText)
         }
@@ -217,6 +221,13 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             val info = RoutingInfo.Builder().setCurrentStep(step(s.kind, s.exit, s.angle, s.cue, s.then == null),
                 if (s.distanceM >= 1000) Distance.create(s.distanceM / 1000.0, Distance.UNIT_KILOMETERS) else Distance.create(s.distanceM.toDouble(), Distance.UNIT_METERS))
             b.setNavigationInfo(info.build())
+            // Debajo de la maniobra, como en los navegadores: hora de llegada, tiempo y kilómetros que quedan.
+            s.remainingS?.let { secs ->
+                val left = if (s.remainingM >= 1000) Distance.create(s.remainingM / 1000.0, Distance.UNIT_KILOMETERS)
+                    else Distance.create(s.remainingM.toDouble(), Distance.UNIT_METERS)
+                b.setDestinationTravelEstimate(TravelEstimate.Builder(left, java.time.ZonedDateTime.now().plusSeconds(secs))
+                    .setRemainingTimeSeconds(secs).build())
+            }
             return b.build()
         }
         card?.let { c ->
@@ -248,8 +259,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             else -> Maneuver.TYPE_STRAIGHT
         }
         val m = Maneuver.Builder(type)
-            // La flecha girada lo que gira la calle (BRouter: negativo a la izquierda).
-            .setIcon(CarIcon.Builder(IconCompat.createWithBitmap(arrow(((angle % 360) + 360) % 360))).build())
+            .setIcon(CarIcon.Builder(IconCompat.createWithBitmap(maneuverIcon(kind, angle))).build())
         if (type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW)
             m.setRoundaboutExitNumber(kotlin.math.abs(exit).coerceAtLeast(1))
         return Step.Builder(cue).setManeuver(m.build()).build()
@@ -335,6 +345,95 @@ class MapCarScreen(car: CarContext) : Screen(car) {
         }
         c.rotate(deg.toFloat(), s / 2f, s / 2f)
         c.drawPath(path, p)
+        return bmp
+    }
+
+    /**
+     * El dibujo de la maniobra como en los navegadores: un tallo que sube desde abajo y se dobla hacia
+     * donde gira la calle, con la punta al final; la rotonda con su anillo; el destino, una bandera.
+     * El lado sale del tipo de maniobra y la cuánto gira, del ángulo de BRouter (si es razonable).
+     * Antes era una flecha suelta girada, que parecía el cursor de posición.
+     */
+    private fun maneuverIcon(kind: MKind, angle: Int): Bitmap {
+        val s = 128f
+        val bmp = createBitmap(s.toInt(), s.toInt())
+        val c = Canvas(bmp)
+        val w = s * 0.13f
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE; style = Paint.Style.STROKE; strokeWidth = w
+            strokeCap = Paint.Cap.BUTT; strokeJoin = Paint.Join.ROUND
+        }
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+        val side = kind.side
+        val typical = when (kind) {
+            MKind.SLIGHT_LEFT, MKind.SLIGHT_RIGHT -> 40
+            MKind.SHARP_LEFT, MKind.SHARP_RIGHT -> 135
+            MKind.KEEP_LEFT, MKind.KEEP_RIGHT -> 25
+            MKind.EXIT_LEFT, MKind.EXIT_RIGHT -> 45
+            else -> 90
+        }
+        val a = kotlin.math.abs(angle)
+        // Cuánto se dobla: el ángulo real dentro de lo que corresponde al tipo, para que «ligeramente» no parezca un giro cerrado.
+        val bend = side * (if (a in 1..180) a.coerceIn(typical - 25, typical + 30) else typical).coerceIn(15, 160)
+        /** La punta: un triángulo en (x, y) mirando a [deg] (0 = arriba, positivo a la derecha). */
+        fun head(x: Float, y: Float, deg: Float) {
+            val r = Math.toRadians(deg.toDouble())
+            val ux = kotlin.math.sin(r).toFloat(); val uy = -kotlin.math.cos(r).toFloat()
+            val len = s * 0.21f; val half = s * 0.18f
+            c.drawPath(Path().apply {
+                moveTo(x + ux * len, y + uy * len)
+                lineTo(x - uy * half, y + ux * half)
+                lineTo(x + uy * half, y - ux * half)
+                close()
+            }, fill)
+        }
+        when (kind) {
+            MKind.END -> {
+                // Bandera: mástil y banderín.
+                c.drawLine(s * 0.32f, s * 0.92f, s * 0.32f, s * 0.12f, stroke)
+                c.drawPath(Path().apply { moveTo(s * 0.32f, s * 0.12f); lineTo(s * 0.82f, s * 0.28f); lineTo(s * 0.32f, s * 0.46f); close() }, fill)
+            }
+            MKind.UTURN, MKind.UTURN_LEFT, MKind.UTURN_RIGHT -> {
+                val dir = if (side == 0) -1 else side
+                val x0 = s / 2 - dir * s * 0.16f; val x1 = s / 2 + dir * s * 0.16f
+                c.drawPath(Path().apply {
+                    moveTo(x0, s * 0.92f); lineTo(x0, s * 0.42f)
+                    arcTo(android.graphics.RectF(minOf(x0, x1), s * 0.26f, maxOf(x0, x1), s * 0.58f), if (dir > 0) 180f else 0f, dir * 180f)
+                    lineTo(x1, s * 0.56f)
+                }, stroke)
+                head(x1, s * 0.56f, 180f)
+            }
+            MKind.ROUNDABOUT, MKind.ROUNDABOUT_LEFT -> {
+                // Anillo, entrada desde abajo y salida hacia donde queda (en España, girando a la izquierda por dentro).
+                val cx = s / 2; val cy = s * 0.52f; val rr = s * 0.15f
+                val ring = Paint(stroke).apply { strokeWidth = w * 0.7f; alpha = 170 }
+                c.drawCircle(cx, cy, rr, ring)
+                c.drawLine(cx, s * 0.95f, cx, cy + rr, stroke)
+                // El ángulo de BRouter, con su signo (negativo a la izquierda): una rotonda puede salir a cualquier lado.
+                val out = if (a <= 180) angle else 90
+                val r = Math.toRadians(out.toDouble())
+                val ux = kotlin.math.sin(r).toFloat(); val uy = -kotlin.math.cos(r).toFloat()
+                val sx = cx + ux * rr; val sy = cy + uy * rr
+                val ex = cx + ux * s * 0.27f; val ey = cy + uy * s * 0.27f
+                c.drawLine(sx, sy, ex, ey, stroke)
+                head(ex, ey, out.toFloat())
+            }
+            else -> if (side == 0) {
+                c.drawLine(s / 2, s * 0.95f, s / 2, s * 0.32f, stroke)
+                head(s / 2, s * 0.32f, 0f)
+            } else {
+                // Tallo desde abajo (algo hacia el lado contrario, para que quepa el brazo) y brazo doblado.
+                // En un giro cerrado el codo va más arriba y más al lado contrario: el brazo baja y tiene que caber.
+                val sharp = kotlin.math.abs(bend) > 100
+                val px = s / 2 - side * s * (if (sharp) 0.2f else 0.12f); val py = s * (if (sharp) 0.36f else 0.56f)
+                val r = Math.toRadians(bend.toDouble())
+                val ux = kotlin.math.sin(r).toFloat(); val uy = -kotlin.math.cos(r).toFloat()
+                val arm = s * 0.26f
+                val ex = px + ux * arm; val ey = py + uy * arm
+                c.drawPath(Path().apply { moveTo(px, s * 0.95f); lineTo(px, py); lineTo(ex, ey) }, stroke)
+                head(ex, ey, bend.toFloat())
+            }
+        }
         return bmp
     }
 

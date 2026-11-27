@@ -31,8 +31,10 @@ import kotlin.math.hypot
  * Lo que se pinta encima de las teselas, igual en el móvil y en el coche: rótulos del híbrido, track
  * abierto, track que se graba, puntos guardados (con la línea al destino) y la posición.
  */
-class MapScene(context: Context, density: Float) {
+class MapScene(context: Context, density: Float, carMode: Boolean = false) {
     private val altDensity = density
+    /** En el coche, la ruta y la posición más gruesas: la pantalla está más lejos y se mira de reojo. */
+    private val line = if (carMode) 1.7f else 1f
     // Los rótulos del híbrido: una segunda capa de teselas (PNG transparente) sobre la ortofoto,
     // debajo de los tracks y la posición. Mientras carga no pinta nada (de serie, una cuadrícula gris
     // que taparía la foto).
@@ -45,20 +47,23 @@ class MapScene(context: Context, density: Float) {
     // El track que se sigue: lo que queda, fuerte; lo andado, claro; y, si estás fuera, una línea
     // discontinua hasta el punto más cercano del track (en línea recta: por dónde volver).
     /** La ruta que se mira antes de empezar (vista previa con alternativas). */
-    val preview = trackLine(MapColors.follow.toArgb(), 7f * density).apply { outlinePaint.alpha = 210 }
-    val followDone = trackLine(MapColors.followDone.toArgb(), 6f * density)
-    val followAhead = trackLine(MapColors.follow.toArgb(), 6f * density)
+    val preview = trackLine(MapColors.follow.toArgb(), 7f * density * line).apply { outlinePaint.alpha = 210 }
+    val followDone = trackLine(MapColors.followDone.toArgb(), 6f * density * line)
+    val followAhead = trackLine(MapColors.follow.toArgb(), 6f * density * line)
+    /** En el coche, un borde blanco bajo lo que queda, para que destaque sobre el mapa claro del IGN. */
+    private val followCasing = if (carMode) trackLine(android.graphics.Color.WHITE, (6f * line + 4f) * density) else null
     val followGap = trackLine(MapColors.offTrack.toArgb(), 3f * density).apply {
         outlinePaint.pathEffect = DashPathEffect(floatArrayOf(10f * density, 7f * density), 0f)
     }
     val points = WaypointsOverlay(density)
     val radars = RadarsOverlay(density)
-    val position = PositionOverlay(density)
+    val position = PositionOverlay(density, carMode)
 
     fun install(map: MapView) {
         map.overlays += opened
         map.overlays += preview
         map.overlays += followDone
+        followCasing?.let { map.overlays += it }
         map.overlays += followAhead
         map.overlays += followGap
         map.overlays += recording
@@ -130,6 +135,7 @@ class MapScene(context: Context, density: Float) {
         if (route == null) {
             followed = null; followedSplit = -1
             followDone.setPoints(emptyList()); followAhead.setPoints(emptyList()); followGap.setPoints(emptyList())
+            followCasing?.setPoints(emptyList())
             return
         }
         // Mientras no has llegado al track, todo está por andar.
@@ -140,6 +146,7 @@ class MapScene(context: Context, density: Float) {
             val here = fix?.takeIf { split > 0 }?.let { GeoPoint(it.match.lat, it.match.lon) }
             followDone.setPoints(if (here == null) emptyList() else all.take(split) + here)
             followAhead.setPoints(if (here == null) all else listOf(here) + all.drop(split))
+            followCasing?.setPoints(followAhead.actualPoints)
         }
         val loc = location?.takeIf { Gps.isFresh(it) }
         val away = fix != null && loc != null && fix.status in setOf(FollowStatus.OFF_TRACK, FollowStatus.APPROACHING)
@@ -164,7 +171,7 @@ fun trackLine(color: Int, width: Float) = Polyline().apply {
 }
 
 /** Tu posición: el círculo de precisión, el punto y, si te mueves, una flecha hacia donde vas. */
-class PositionOverlay(private val density: Float) : Overlay() {
+class PositionOverlay(private val density: Float, private val car: Boolean = false) : Overlay() {
     var location: Location? = null
     var fallback: Pair<Double, Double>? = null
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -193,7 +200,18 @@ class PositionOverlay(private val density: Float) : Overlay() {
                 c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, halo)
             }
         }
-        if (fresh && loc != null && loc.hasBearing() && loc.hasSpeed() && loc.speed > 0.7f) {
+        val moving = fresh && loc != null && loc.hasBearing() && loc.hasSpeed() && loc.speed > 0.7f
+        if (car && moving) {
+            // En el coche, en marcha, la flecha de los navegadores (grande, con borde blanco) en vez del punto.
+            arrow.reset()
+            val s = 15 * density
+            arrow.moveTo(0f, -s * 1.5f); arrow.lineTo(s, s); arrow.lineTo(0f, s * 0.45f); arrow.lineTo(-s, s); arrow.close()
+            c.save(); c.translate(pt.x.toFloat(), pt.y.toFloat()); c.rotate(loc!!.bearing)
+            ring.strokeWidth = 3.5f * density; ring.strokeJoin = Paint.Join.ROUND
+            fill.color = color; c.drawPath(arrow, fill); c.drawPath(arrow, ring); c.restore()
+            return
+        }
+        if (moving) {
             arrow.reset()
             val s = 9 * density
             arrow.moveTo(0f, -s * 2.1f); arrow.lineTo(s * 0.9f, -s * 0.6f); arrow.lineTo(-s * 0.9f, -s * 0.6f); arrow.close()
@@ -202,9 +220,10 @@ class PositionOverlay(private val density: Float) : Overlay() {
             fill.color = color; c.drawPath(arrow, fill); c.restore()
         }
         fill.color = color
-        ring.strokeWidth = 2.5f * density
-        c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 8 * density, fill)
-        c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 8 * density, ring)
+        val r = (if (car) 11 else 8) * density
+        ring.strokeWidth = (if (car) 3.5f else 2.5f) * density
+        c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, fill)
+        c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, ring)
     }
 }
 
