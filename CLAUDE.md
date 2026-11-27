@@ -43,7 +43,8 @@ y sus alternativas y los mapas del camino funcionan** (27-nov-2026).
 - `data/RouteTilesWorker` (WorkManager 2.12.0, dependencia nueva, la misma que TiempoDroid; es de
   AndroidX, sin servicios de Google): periódico cada `RouteTiles.REFRESH_DAYS` (7) días con red sin
   coste (`UNMETERED`), batería y espacio; se programa en `GpsApp` (`KEEP`). Con «Usar la red» apagado
-  no hace nada. Hasta 3 reintentos si falla.
+  no hace nada. Hasta 3 reintentos si falla. WorkManager añade dos permisos normales (sin diálogo):
+  `RECEIVE_BOOT_COMPLETED` (reprogramar tras reiniciar el móvil) y `WAKE_LOCK`.
 - `Routing.updateOutdated`: HEAD a cada cuadro del móvil (`Last-Modified`) y, si es más nuevo
   (`RouteTiles.outdated`, 1 min de margen), lo vuelve a bajar. El viejo sirve hasta que el nuevo
   está entero (`rename`; una ruta en marcha sigue con el que tenía abierto).
