@@ -197,6 +197,13 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
 
     fun update(location: Location?, points: List<Waypoint>, target: Waypoint?, track: List<TrackPoint>, following: FollowState?) {
         this.location = location; this.points = points; this.target = target; this.track = track; this.following = following
+        // La última posición con señal, guardada también desde el coche (cada 50 m: al aparcar queda casi donde el coche):
+        // es la bola gris y el punto de salida de una ruta si al arrancar no hay señal.
+        location?.takeIf { Gps.isFresh(it) }?.let { loc ->
+            val last = prefs.last
+            if (last == null || es.altamirano.gps.core.Geo.distanceM(last.first, last.second, loc.latitude, loc.longitude) > 50)
+                prefs.last = loc.latitude to loc.longitude
+        }
         redraw()
         if (follow) recenter()
     }

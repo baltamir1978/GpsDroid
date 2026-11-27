@@ -279,25 +279,29 @@ class MapCarScreen(car: CarContext) : Screen(car) {
      * línea recta como último recurso.
      */
     private fun routeTo(w: es.altamirano.gps.core.Waypoint) {
-        val here = Gps.location.value?.takeIf { Gps.isFresh(it) }
+        // Sin señal (en el garaje), desde la última posición conocida, la bola gris.
+        val here = Gps.routeStart(carContext)
         if (here == null) { beeline(w, "Sin señal GPS: te indico la dirección cuando la haya"); return }
-        CarToast.makeText(carContext, "Calculando la ruta a «${w.name}»…", CarToast.LENGTH_SHORT).show()
+        val fresh = Gps.isFresh(here)
+        val heading = if (fresh) here.travelHeading(1f) else null
+        CarToast.makeText(carContext, if (fresh) "Calculando la ruta a «${w.name}»…"
+            else "Sin señal GPS: ruta a «${w.name}» desde donde se te vio por última vez", CarToast.LENGTH_LONG).show()
         lifecycleScope.launch {
             val from = here.latitude to here.longitude
-            var r = Routing.route(carContext, from, w.lat to w.lon, TravelMode.CAR, here.travelHeading(1f))
+            var r = Routing.route(carContext, from, w.lat to w.lon, TravelMode.CAR, heading)
             if (r is Routing.Result.MissingTiles) {
                 if (!Tiles.canUseNetwork(carContext)) { beeline(w, "Faltan los datos de rutas de esta zona y no hay red: te indico la dirección"); return@launch }
                 CarToast.makeText(carContext, "Bajando los datos de rutas de la zona…", CarToast.LENGTH_LONG).show()
                 for (name in r.tiles) {
                     Routing.download(carContext, name) { _, _ -> }?.let { beeline(w, "$it. Te indico la dirección"); return@launch }
                 }
-                r = Routing.route(carContext, from, w.lat to w.lon, TravelMode.CAR, here.travelHeading(1f))
+                r = Routing.route(carContext, from, w.lat to w.lon, TravelMode.CAR, heading)
             }
             when (r) {
                 is Routing.Result.Ok -> {
                     Waypoints.setTarget(null)
                     // Como Waze: todas las rutas posibles en el mapa, a elegir; «Empezar» va por la elegida.
-                    RoutePreview.show(carContext, r.route, w.name, w.lat, w.lon, TravelMode.CAR, from, here.travelHeading(1f))
+                    RoutePreview.show(carContext, r.route, w.name, w.lat, w.lon, TravelMode.CAR, from, heading)
                     screenManager.push(RouteChoiceCarScreen(carContext))
                 }
                 is Routing.Result.Failed -> beeline(w, "${r.message}: te indico la dirección")

@@ -71,6 +71,15 @@ object Gps {
     fun isProviderEnabled() = runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
 
     /** Una posición tiene fix «de ahora» si llegó hace menos de 10 s. */
+    /**
+     * Desde dónde sale una ruta: la posición de ahora o, sin señal (en un garaje), la última que se
+     * supo —la bola gris del mapa: la de esta sesión o la del sistema, y si no la guardada—. null si
+     * nunca ha habido ninguna. Con una vieja la ruta se enseña igual y, al llegar la señal, se sigue
+     * (o se recalcula si estás en otro sitio).
+     */
+    fun routeStart(context: Context): Location? = location.value
+        ?: Prefs(context).last?.let { (lat, lon) -> Location("last").apply { latitude = lat; longitude = lon } }
+
     fun isFresh(loc: Location?) = loc != null && SystemClock.elapsedRealtimeNanos() - loc.elapsedRealtimeNanos < 10_000_000_000L
 
     private val listener = object : LocationListener {

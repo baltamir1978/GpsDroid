@@ -128,10 +128,12 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
     calculate = calc@{ mode ->
         context.getSharedPreferences("gps", Context.MODE_PRIVATE).edit { putString("travel_mode", mode.name) }
         // La de ahora, no la de cuando se abrió la ficha: tras bajar un cuadro pueden haber pasado minutos.
-        val here = (Gps.location.value ?: loc)?.takeIf { Gps.isFresh(it) }
+        // Sin señal, desde la última posición conocida (la bola gris del mapa).
+        val here = (Gps.location.value ?: loc)?.takeIf { Gps.isFresh(it) } ?: Gps.routeStart(context)
         if (here == null) { error = "Todavía no hay posición del GPS: la ruta sale desde donde estás."; return@calc }
+        val heading = if (Gps.isFresh(here)) here.travelHeading(1f) else null
         working = scope.launch {
-            val r = Routing.route(context, here.latitude to here.longitude, w.lat to w.lon, mode, here.travelHeading(1f))
+            val r = Routing.route(context, here.latitude to here.longitude, w.lat to w.lon, mode, heading)
             working = null
             when (r) {
                 is Routing.Result.Failed -> error = r.message
@@ -143,7 +145,7 @@ fun RouteToButton(w: Waypoint, loc: Location?, onStarted: () -> Unit) {
                 }
                 is Routing.Result.Ok -> {
                     // Primero se ve en el mapa, con sus datos y las alternativas; desde ahí se empieza.
-                    RoutePreview.show(context, r.route, w.name, w.lat, w.lon, mode, here.latitude to here.longitude, here.travelHeading(1f))
+                    RoutePreview.show(context, r.route, w.name, w.lat, w.lon, mode, here.latitude to here.longitude, heading)
                     onStarted()
                 }
             }

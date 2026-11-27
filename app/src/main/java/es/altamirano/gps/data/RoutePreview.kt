@@ -83,9 +83,9 @@ object RoutePreview {
      */
     suspend fun fromNavigation(context: Context): String? {
         val nav = Following.state.value?.nav ?: return "No vas por ninguna ruta"
-        val loc = Gps.location.value?.takeIf { Gps.isFresh(it) } ?: return "Sin posición del GPS"
+        val loc = Gps.routeStart(context) ?: return "Sin posición del GPS"
         val from = loc.latitude to loc.longitude
-        val heading = if (loc.hasBearing() && loc.hasSpeed() && loc.speed > 1f) loc.bearing else null
+        val heading = if (Gps.isFresh(loc) && loc.hasBearing() && loc.hasSpeed() && loc.speed > 1f) loc.bearing else null
         return when (val r = Routing.route(context, from, nav.destLat to nav.destLon, nav.mode, heading)) {
             is Routing.Result.Ok -> { show(context, r.route, nav.destName, nav.destLat, nav.destLon, nav.mode, from, heading); null }
             is Routing.Result.Failed -> r.message

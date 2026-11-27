@@ -36,6 +36,16 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.25.0 (27-nov-2026): ruta sin señal, desde la bola gris.** Bruno: al arrancar en el garaje, sin
+GPS, el coche dijo que esperaría a tener señal para enseñar la ruta; «debería marcármela desde el último
+lugar en el que me ha detectado, donde estaba la pelota gris».
+- `Gps.routeStart`: la posición de ahora o, si no, la última conocida (`Gps.location`, que ya trae la
+  `getLastKnownLocation` del sistema al pedir el GPS, o `Prefs.last`). La usan el coche (`routeTo`), la
+  ficha del móvil (`RouteUi`) y el botón de otras rutas (`RoutePreview.fromNavigation`). Con una vieja,
+  sin rumbo. Seguir ya ignora las posiciones viejas: al llegar la señal se sigue o se recalcula.
+- El coche guarda también `Prefs.last` (cada 50 m; antes sólo el mapa del móvil, cada 200 m).
+- **Sin probar** (ni en el emulador ni en el coche).
+
 **0.24.0 (27-nov-2026): tarjeta propia en el mapa del coche y zoom recordado.** Bruno, tras probar la
 0.23.0: el cuadro naranja «demasiado grande, debería ser semitransparente y en otro color», una
 esquina negra debajo de su esquina de arriba a la izquierda, los rótulos «mucho más pixelados» y
