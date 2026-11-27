@@ -44,6 +44,8 @@ data class DownloadState(
     val failed: Int = 0,
     /** Lo bajado, en bytes (lo que se enseña, con el porcentaje). */
     val bytes: Long = 0,
+    /** Si lleva un rato sin avanzar y MapLibre está reintentando, por qué («sin conexión…»); null si va bien. */
+    val retrying: String? = null,
     val layer: MapLayer? = null,
     val message: String? = null, // al acabar: resumen o motivo de la parada
     /** Los mapas del camino que se sigue (no una zona elegida en Offline). */
@@ -325,19 +327,34 @@ object Tiles {
                 var lastDone = -1L
                 region.setObserver(object : OfflineRegion.OfflineRegionObserver {
                     override fun onStatusChanged(status: OfflineRegionStatus) {
-                        if (status.completedResourceCount != lastDone) { lastDone = status.completedResourceCount; lastProgress = System.currentTimeMillis() }
+                        val moved = status.completedResourceCount != lastDone
+                        if (moved) { lastDone = status.completedResourceCount; lastProgress = System.currentTimeMillis() }
                         _download.value = _download.value.copy(done = doneBefore + status.completedResourceCount.toInt(),
                             total = totalBefore + status.requiredResourceCount.toInt(), failed = failed, layer = layer,
-                            bytes = bytesBefore + status.completedResourceSize)
+                            bytes = bytesBefore + status.completedResourceSize,
+                            retrying = if (moved) null else _download.value.retrying)
                         if (status.isComplete) finished.complete(Unit)
                     }
-                    override fun onError(error: OfflineRegionError) { failed++; lastError = error.message }
+                    // Una tesela que no existe (la ortofoto fuera de cobertura, el vectorial vacío) no es un fallo; lo demás
+                    // (cortes de red, el IGN que no contesta) MapLibre lo reintenta solo: sólo se cuenta para decirlo si
+                    // se atasca. Antes cada reintento salía como «fallo» aunque luego bajara (Bruno vio «28 fallos»).
+                    override fun onError(error: OfflineRegionError) {
+                        if (error.reason == OfflineRegionError.REASON_NOT_FOUND) return
+                        failed++; lastError = error.message; lastReason = error.reason
+                    }
                     override fun mapboxTileCountLimitExceeded(limit: Long) { stopped = "Demasiadas teselas"; finished.complete(Unit) }
                 })
                 region.setDownloadState(OfflineRegion.STATE_ACTIVE)
                 // Esperar a que acabe, vigilando que avance y el espacio.
                 while (!finished.isCompleted) {
                     withTimeoutOrNull(2000) { finished.await() }
+                    // Quince segundos sin avanzar con errores: decir que está reintentando y por qué.
+                    if (System.currentTimeMillis() - lastProgress > 15_000 && lastReason != null)
+                        _download.value = _download.value.copy(retrying = when (lastReason) {
+                            OfflineRegionError.REASON_CONNECTION -> "sin conexión, reintentando"
+                            OfflineRegionError.REASON_SERVER -> "el IGN no responde, reintentando"
+                            else -> "reintentando"
+                        })
                     if (System.currentTimeMillis() - lastProgress > STALL_MS) { stopped = "Parada: el IGN no responde (¿sin conexión?)"; break }
                     if (cacheDir.usableSpace < MIN_FREE_BYTES) { stopped = "Parada: queda poco espacio libre"; break }
                 }
@@ -351,9 +368,9 @@ object Tiles {
                 if (stopped != null) break
             }
             val why = lastError?.let { " Último error: $it." } ?: ""
-            _download.value = DownloadState(false, doneBefore, totalBefore, failed, bytesBefore, null,
+            _download.value = DownloadState(false, doneBefore, totalBefore, failed, bytesBefore, null, null,
                 stopped?.let { "$it.$why" } ?: doneMessage, route = route)
-            lastError = null
+            lastError = null; lastReason = null
         }
     }
 
@@ -366,6 +383,7 @@ object Tiles {
     }
 
     @Volatile private var lastError: String? = null
+    @Volatile private var lastReason: String? = null
 
     /** Para las pruebas o el registro: espera a que acabe la descarga en marcha. */
     internal suspend fun awaitIdle() { while (job?.isActive == true) delay(500) }

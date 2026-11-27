@@ -163,7 +163,7 @@ fun DownloadScreen() {
                     LinearWavyProgressIndicator(progress = { if (dl.total > 0) dl.done.toFloat() / dl.total else 0f }, Modifier.fillMaxWidth().height(14.dp))
                     // Al empezar MapLibre sólo conoce el estilo («1»): el total crece al leerlo.
                     Text(OfflineZone.formatBytes(dl.bytes) + (if (dl.total > 1) " · ${dl.done * 100 / dl.total} %" else " · empezando…") +
-                        if (dl.failed > 0) " · ${dl.failed} fallos" else "", fontSize = 14.sp)
+                        (dl.retrying?.let { " · $it" } ?: ""), fontSize = 14.sp)
                     Text("Mantén la app abierta hasta que acabe.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(onClick = { Tiles.cancel() }) { Text("Cancelar") }
                 } else {

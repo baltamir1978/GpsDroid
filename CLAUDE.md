@@ -44,6 +44,16 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.28.2 (27-nov-2026): sin «fallos» falsos en las descargas.** Bruno, con la 0.28.1: «funciona todo
+pero en la descarga me ha marcado 28 fallos». Eran reintentos: MapLibre reintenta solo los errores de
+red y del servidor y cada `onError` se contaba como fallo aunque la tesela acabara bajando (la región
+sólo se da por completa con todo). Ahora `REASON_NOT_FOUND` (tesela que no existe) no cuenta y, si en
+15 s no avanza, el progreso dice «sin conexión, reintentando» / «el IGN no responde, reintentando»
+(`DownloadState.retrying`) en vez de un contador. Probado en el emulador cortando el wifi y los datos a
+mitad de una descarga del satélite de 5 km: «13 MB · 1 % · sin conexión, reintentando» y, al volver la
+red, siguió sola. Bruno confirma que lo demás de la 0.28.1 funciona en el móvil (27-nov); el coche,
+sin probar todavía.
+
 **0.28.1 (27-nov-2026, en Play —prueba interna— el mismo día; lleva la 0.28.0): la app se cerraba al cambiar de mapa.** Bruno: «se me ha cerrado la aplicación
 de golpe». Reproducido en el emulador cambiando de mapa con la posición moviéndose: al pedir un estilo
 nuevo MapLibre invalida el anterior y `GpsLayers` le seguía escribiendo la posición (cada segundo) →
