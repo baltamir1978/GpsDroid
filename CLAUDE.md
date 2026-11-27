@@ -44,7 +44,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.28.2 (27-nov-2026): sin «fallos» falsos en las descargas.** Bruno, con la 0.28.1: «funciona todo
+**0.28.2 (27-nov-2026, en Play —prueba interna— el mismo día): sin «fallos» falsos en las descargas.** Bruno, con la 0.28.1: «funciona todo
 pero en la descarga me ha marcado 28 fallos». Eran reintentos: MapLibre reintenta solo los errores de
 red y del servidor y cada `onError` se contaba como fallo aunque la tesela acabara bajando (la región
 sólo se da por completa con todo). Ahora `REASON_NOT_FOUND` (tesela que no existe) no cuenta y, si en
