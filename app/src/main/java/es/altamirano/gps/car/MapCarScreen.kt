@@ -192,7 +192,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             .addAction(icon(R.drawable.car_layers) {
                 CarToast.makeText(carContext, renderer.nextStyle().label, CarToast.LENGTH_SHORT).show()
             })
-            .addAction(icon(R.drawable.car_place) { screenManager.push(PointsCarScreen(carContext, { renderer.setHeadingUp(it) }) { w -> routeTo(w) }) })
+            .addAction(icon(R.drawable.car_search) { screenManager.push(PointsCarScreen(carContext, { renderer.setHeadingUp(it) }) { w -> routeTo(w) }) })
             // Con una ruta o un track en marcha, este botón es el de pararlo (guardar un punto conduciendo es lo de menos).
             .addAction(if (following) icon(R.drawable.car_close, CarColor.RED) { Following.stop(carContext) }
                 else icon(R.drawable.car_add_place) { savePoint() })

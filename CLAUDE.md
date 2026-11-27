@@ -36,6 +36,21 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.17.1 (27-nov-2026): arreglos de Android Auto.** Bruno: «cuando intenta calcular una ruta en coche
+desde Android Auto, da un error y se cierra»; «el zoom por defecto es demasiado cerca»; «el icono de
+puntos para seleccionar destino debería ser una lupa».
+- **El cierre**: `RoutePreviewNavigationTemplate.Builder.setItemList` exige que cada fila lleve un
+  `DurationSpan` o `DistanceSpan` (`ModelUtils.validateAllRowsHaveDistanceOrDuration`) y si no lanza
+  `IllegalArgumentException`. `RouteChoiceCarScreen`: la duración con `DurationSpan` en el título y la
+  distancia con `DistanceSpan` en el texto. Cualquier lista de rutas en el coche: con spans.
+- Zoom del coche al abrir: 14 fijo (`CarMapRenderer.START_ZOOM`); antes heredaba el del móvil (≥13).
+- Botón de los puntos en el mapa del coche: lupa (`car_search`); las filas de la lista siguen con la chincheta.
+- Radar «sobre las vías de Chamartín» (40.48048, -3.68543): es el del Ayuntamiento de Madrid
+  «Paseo de la Castellana nº 300, salida» (50); Nominatim pone ahí la Castellana en obras (prolongación
+  sobre la playa de vías). Dato oficial: no se toca.
+- Rótulos al revés con «dirección arriba» en el coche: los del IGN vienen pintados en las teselas
+  (PNG), no se pueden girar uno a uno; sin cambiar (ver lo hablado con Bruno).
+
 **0.17.0 (26-nov-2026): cámaras de semáforo en rojo.** Bruno: «¿hay avisos de las cámaras de
 semáforo? ¿Se podrían incluir con un icono diferente?».
 - Ni la DGT ni Radares Anunciados las tienen (son municipales). OpenStreetMap, 218 en España

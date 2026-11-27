@@ -42,7 +42,11 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     private var target: Waypoint? = null
     private var track: List<TrackPoint> = emptyList()
     private var following: FollowState? = null
-    private var zoom = prefs.view?.third?.coerceAtLeast(13.0) ?: 15.0
+    /**
+     * Al abrir, un zoom de carretera, independiente del móvil (heredar el suyo dejaba el coche muy
+     * cerca); lo que se cambie con los botones vale mientras dure la sesión del coche.
+     */
+    private var zoom = START_ZOOM
     private var speed: SpeedOverlay? = null
 
     var style: MapStyle = prefs.style
@@ -231,6 +235,8 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
 
     private companion object {
         const val RESUME_FOLLOW_MS = 15_000L
+        /** Antes, el del móvil (casi siempre 15-16): Bruno lo quería «un punto o dos más arriba». */
+        const val START_ZOOM = 14.0
         /** 2 m/s, unos 7 km/h. */
         const val HEADING_UP_MIN_SPEED = 2f
     }

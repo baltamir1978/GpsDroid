@@ -3,7 +3,12 @@ package es.altamirano.gps.car
 import androidx.car.app.CarContext
 import androidx.car.app.CarToast
 import androidx.car.app.Screen
+import android.text.SpannableString
+import android.text.Spanned
 import androidx.car.app.model.Action
+import androidx.car.app.model.Distance
+import androidx.car.app.model.DistanceSpan
+import androidx.car.app.model.DurationSpan
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
@@ -41,10 +46,13 @@ class RouteChoiceCarScreen(car: CarContext) : Screen(car) {
             .setOnSelectedListener { i -> RoutePreview.select(i) }
             .setSelectedIndex(st.selected.coerceIn(0, st.options.size - 1))
         st.options.forEachIndexed { i, o ->
-            list.addItem(Row.Builder()
-                .setTitle(o.route.totalS?.let { duration(it) } ?: "Ruta ${i + 1}")
-                .addText(Geo.formatDistance(o.lengthM) + if (o.route.offroad) " · con pistas de tierra" else "")
-                .build())
+            // Android Auto exige que cada fila lleve la duración o la distancia como «span» (si no, la
+            // plantilla lanza IllegalArgumentException y la app se cierra): el coche las formatea a su modo.
+            val title = o.route.totalS?.let { s -> spanned(duration(s), DurationSpan.create(s)) } ?: SpannableString("Ruta ${i + 1}")
+            val dist = Geo.formatDistance(o.lengthM)
+            val text = spanned(dist + if (o.route.offroad) " · con pistas de tierra" else "",
+                DistanceSpan.create(carDistance(o.lengthM)), dist.length)
+            list.addItem(Row.Builder().setTitle(title).addText(text).build())
         }
         b.setItemList(list.build())
         b.setNavigateAction(Action.Builder().setTitle(if (st.loading) "Empezar (buscando más…)" else "Empezar").setOnClickListener {
@@ -53,4 +61,9 @@ class RouteChoiceCarScreen(car: CarContext) : Screen(car) {
         return b.build()
     }
 
+    private fun spanned(text: String, span: Any, end: Int = text.length) =
+        SpannableString(text).apply { setSpan(span, 0, end, Spanned.SPAN_INCLUSIVE_EXCLUSIVE) }
+
+    private fun carDistance(m: Double): Distance =
+        if (m >= 1000) Distance.create(m / 1000.0, Distance.UNIT_KILOMETERS) else Distance.create(m, Distance.UNIT_METERS)
 }
