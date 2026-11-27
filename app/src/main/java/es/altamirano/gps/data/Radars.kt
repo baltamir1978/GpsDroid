@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -56,7 +57,9 @@ object Radars {
      * la de la app ya trae más radares, y con red se baja la buena en el acto.
      */
     private fun file(context: Context) = File(context.filesDir, "radares.csv").also { f ->
-        if (f.exists() && runCatching { f.bufferedReader().use { it.read() } }.getOrNull().let { it == 'F'.code || it == 'T'.code }) f.delete()
+        // Ojo: la de ahora empieza por el nombre de la clase («FIXED;…»): mirar «F;»/«T;» enteros. Hasta
+        // la 0.20.0 se miraba sólo la letra y la lista bajada se borraba al leerla (se usaba la de la app).
+        if (f.exists() && RadarList.isLegacyCsv(runCatching { f.bufferedReader().use { r -> String(CharArray(2).also { r.read(it) }) } }.getOrNull())) f.delete()
     }
     private fun prefs(context: Context) = context.getSharedPreferences("gps", Context.MODE_PRIVATE)
 
@@ -108,49 +111,81 @@ object Radars {
     /** Fecha de la lista que se usa (la bajada) o null si es la que trae la app. */
     fun updatedAt(context: Context): Long? = file(context).takeIf { it.exists() }?.lastModified()
 
-    /** Si hace más de un día (o nunca), bajar la lista. Sólo con red y «Usar la red». */
+    /** Fecha de la lista de cámaras de semáforo bajada, o null si es la que trae la app. */
+    fun redLightsUpdatedAt(context: Context): Long? = redLightFile(context).takeIf { it.exists() }?.lastModified()
+
+    /** Si toca bajar la lista de radares (más de un día) o la de semáforos (más de una semana). */
+    fun radarsOld(context: Context): Boolean {
+        // La fecha del fichero es la del servidor: se cuenta desde la última vez que se bajó.
+        val fetched = prefs(context).getLong("radars_fetched", 0L).takeIf { it > 0 } ?: updatedAt(context) ?: return true
+        return System.currentTimeMillis() - fetched >= REFRESH_MS
+    }
+    fun redLightsOld(context: Context) = redLightsUpdatedAt(context)?.let { System.currentTimeMillis() - it >= RED_LIGHT_REFRESH_MS } ?: true
+
+    /** La fecha de la lista de Radares Anunciados en el servidor (`Last-Modified` de GitHub Pages), o null. */
+    fun remoteModified(): Long? = runCatching {
+        val c = URL(URL_FEED).openConnection() as HttpURLConnection
+        c.requestMethod = "HEAD"; c.connectTimeout = 10_000; c.readTimeout = 10_000
+        try { if (c.responseCode == 200) c.lastModified.takeIf { it > 0 } else null } finally { c.disconnect() }
+    }.getOrNull()
+
+    /** Si hace más de un día (o nunca), bajar las listas. Sólo con red y «Usar la red». */
     fun refreshIfOld(context: Context) {
-        refreshRedLightsIfOld(context)
-        val f = file(context)
-        if (f.exists() && System.currentTimeMillis() - f.lastModified() < REFRESH_MS) return
         if (!Tiles.canUseNetwork(context)) return
         io.launch {
-            val list = runCatching { get(URL_FEED)?.let { RadarList.parseFeed(it) } }.onFailure { Log.w("GpsDroid", "Radares (feed): ${it.message}") }.getOrNull()
-                ?.takeIf { it.size >= 500 }
-                ?: runCatching { get(URL_DGT)?.let { RadarList.parseDatex(it) } }.onFailure { Log.w("GpsDroid", "Radares (DGT): ${it.message}") }.getOrNull()
-                    ?.takeIf { it.size >= 100 }
-                ?: return@launch
-            val tmp = File(f.parentFile, f.name + ".tmp")
-            tmp.writeText(RadarList.toCsv(list)); tmp.renameTo(f)
-            cached = null   // se vuelve a leer con las cámaras de semáforo
+            if (redLightsOld(context)) updateRedLights(context)
+            if (radarsOld(context)) updateRadars(context)
         }
     }
 
     /**
-     * Las cámaras de semáforo, una vez por semana, de Overpass (OpenStreetMap). Sus servidores públicos
-     * se saturan a menudo: si falla, se sigue con las que hay y se prueba la semana siguiente... o
-     * mañana, si ni siquiera había lista bajada.
+     * Baja la lista de radares: el GeoJSON de Radares Anunciados y, si falla, la de la DGT. Se queda
+     * con la fecha del servidor (para saber luego si hay otra más nueva) o, con la DGT, con la de ahora.
+     * Devuelve null si va bien o el motivo si no.
      */
-    private fun refreshRedLightsIfOld(context: Context) {
+    suspend fun updateRadars(context: Context): String? = withContext(Dispatchers.IO) {
+        val f = file(context)
+        var date = 0L
+        val list = runCatching {
+            val c = URL(URL_FEED).openConnection() as HttpURLConnection
+            c.connectTimeout = 15_000; c.readTimeout = 60_000
+            try {
+                if (c.responseCode == 200) { date = c.lastModified; RadarList.parseFeed(c.inputStream.use { it.readBytes().decodeToString() }) } else null
+            } finally { c.disconnect() }
+        }.onFailure { Log.w("GpsDroid", "Radares (feed): ${it.message}") }.getOrNull()
+            ?.takeIf { it.size >= 500 }
+            ?: runCatching { date = 0L; get(URL_DGT)?.let { RadarList.parseDatex(it) } }.onFailure { Log.w("GpsDroid", "Radares (DGT): ${it.message}") }.getOrNull()
+                ?.takeIf { it.size >= 100 }
+            ?: return@withContext "No se ha podido bajar la lista de radares"
+        val tmp = File(f.parentFile, f.name + ".tmp")
+        tmp.writeText(RadarList.toCsv(list))
+        if (date > 0) tmp.setLastModified(date)
+        tmp.renameTo(f)
+        prefs(context).edit { putLong("radars_fetched", System.currentTimeMillis()) }
+        cached = null   // se vuelve a leer con las cámaras de semáforo
+        null
+    }
+
+    /**
+     * Las cámaras de semáforo, de Overpass (OpenStreetMap; una vez por semana sola). Sus servidores
+     * públicos se saturan a menudo: si falla, se sigue con las que hay. Devuelve null si va bien.
+     */
+    suspend fun updateRedLights(context: Context): String? = withContext(Dispatchers.IO) {
         val f = redLightFile(context)
-        if (f.exists() && System.currentTimeMillis() - f.lastModified() < RED_LIGHT_REFRESH_MS) return
-        if (!Tiles.canUseNetwork(context)) return
-        io.launch {
-            runCatching {
-                val c = URL(OVERPASS).openConnection() as HttpURLConnection
-                c.connectTimeout = 15_000; c.readTimeout = 200_000
-                c.requestMethod = "POST"; c.doOutput = true
-                c.setRequestProperty("User-Agent", "IGN-GPS (Android)")
-                c.outputStream.use { it.write(("data=" + java.net.URLEncoder.encode(RED_LIGHT_QUERY, "UTF-8")).toByteArray()) }
-                val text = try { if (c.responseCode == 200) c.inputStream.use { it.readBytes().decodeToString() } else null } finally { c.disconnect() }
-                val list = text?.let { RadarList.parseOverpassRedLights(it) }.orEmpty()
-                if (list.size >= 50) {
-                    val tmp = File(f.parentFile, f.name + ".tmp")
-                    tmp.writeText(RadarList.toCsv(list)); tmp.renameTo(f)
-                    cached = null
-                }
-            }.onFailure { Log.w("GpsDroid", "Semáforos: ${it.message}") }
-        }
+        runCatching {
+            val c = URL(OVERPASS).openConnection() as HttpURLConnection
+            c.connectTimeout = 15_000; c.readTimeout = 200_000
+            c.requestMethod = "POST"; c.doOutput = true
+            c.setRequestProperty("User-Agent", "IGN-GPS (Android)")
+            c.outputStream.use { it.write(("data=" + java.net.URLEncoder.encode(RED_LIGHT_QUERY, "UTF-8")).toByteArray()) }
+            val text = try { if (c.responseCode == 200) c.inputStream.use { it.readBytes().decodeToString() } else null } finally { c.disconnect() }
+            val list = text?.let { RadarList.parseOverpassRedLights(it) }.orEmpty()
+            if (list.size < 50) return@withContext "El servidor de OpenStreetMap está saturado: prueba más tarde"
+            val tmp = File(f.parentFile, f.name + ".tmp")
+            tmp.writeText(RadarList.toCsv(list)); tmp.renameTo(f)
+            cached = null
+            null
+        }.getOrElse { Log.w("GpsDroid", "Semáforos: ${it.message}"); "No se ha podido bajar la lista de semáforos" }
     }
 
     private fun get(url: String): String? {

@@ -136,6 +136,12 @@ object RadarList {
     }.toList()
 
     /** Una línea por radar: `clase;lat;lon;latFin;lonFin;carretera;límite;rumbo;desde;hasta`. */
+    /**
+     * Si un CSV es del formato de la 0.10.0 (sólo la DGT: «F;lat;lon…» o «T;…»), por sus dos primeros
+     * caracteres. El de ahora empieza por el nombre de la clase («FIXED;…»).
+     */
+    fun isLegacyCsv(start: String?): Boolean = start != null && start.length >= 2 && start[1] == ';' && (start[0] == 'F' || start[0] == 'T')
+
     fun toCsv(list: List<Radar>): String = list.joinToString("\n") { r ->
         fun d(v: Double?) = v?.let { "%.6f".format(Locale.ROOT, it) } ?: ""
         listOf(r.kind.name, d(r.lat), d(r.lon), d(r.endLat), d(r.endLon), r.road.replace(";", ","),

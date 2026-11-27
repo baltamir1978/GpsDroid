@@ -52,7 +52,6 @@ import es.altamirano.gps.core.MapLayer
 import es.altamirano.gps.core.MapStyle
 import es.altamirano.gps.core.OfflineZone
 import es.altamirano.gps.data.Gps
-import es.altamirano.gps.data.RouteTilesWorker
 import es.altamirano.gps.data.Routing
 import es.altamirano.gps.data.Radars
 import es.altamirano.gps.data.RadarSettings
@@ -186,6 +185,8 @@ fun DownloadScreen() {
             Text("Incluye lo que se va viendo en el mapa, no sólo las descargas.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
+        Section("Actualizaciones") { UpdatesCard(online) }
+
         Section("Datos para rutas") {
             // Los cuadros de BRouter: se bajan al pedir la primera ruta en una zona; aquí se ven y se borran.
             val routeTiles by Routing.tiles.collectAsState()
@@ -201,20 +202,6 @@ fun DownloadScreen() {
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = { deleteTile = tile }) { Text("Borrar") }
-                }
-            }
-            if (routeTiles.isNotEmpty()) {
-                // Se renuevan solos (RouteTilesWorker); el botón, por si se quiere ya (p. ej. tras
-                // corregir algo en OpenStreetMap: brouter.de tarda un día o dos en recogerlo).
-                val work by remember { RouteTilesWorker.runningFlow(context) }.collectAsState(emptyList())
-                val checking = work.any { !it.state.isFinished }
-                LaunchedEffect(checking) { if (!checking) Routing.refreshTiles(context) }
-                val checked = prefs.routeTilesChecked
-                Text("Se renuevan solos cada semana, con wifi, si OpenStreetMap ha cambiado" +
-                    (if (checked > 0) " (última comprobación: ${shortDate(checked)})." else "."),
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { RouteTilesWorker.runNow(context) }, enabled = online && !checking) {
-                    Text(if (checking) "Buscando datos nuevos…" else "Buscar datos nuevos ahora")
                 }
             }
             Text("Datos de rutas: © colaboradores de OpenStreetMap (ODbL), preparados por BRouter.", fontSize = 11.sp,
@@ -283,8 +270,7 @@ private fun RadarSettingsCard(context: android.content.Context) {
         Column(Modifier.weight(1f)) {
             Text("Avisar de radares en coche", fontSize = 15.sp)
             Text("Yendo por una ruta en coche: radares de la DGT, Cataluña, Euskadi, ayuntamientos y OpenStreetMap (lista de Radares Anunciados). " +
-                (Radars.updatedAt(context)?.let { "Lista del " + java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault())) + "." }
-                    ?: "Se actualiza sola cada día con red."),
+                "La fecha de la lista, en Actualizaciones.",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(cur.enabled, { set(cur.copy(enabled = it)) })
@@ -318,5 +304,5 @@ private fun RadarSettingsCard(context: android.content.Context) {
     }
 }
 
-private fun shortDate(ms: Long): String =
+internal fun shortDate(ms: Long): String =
     java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()))

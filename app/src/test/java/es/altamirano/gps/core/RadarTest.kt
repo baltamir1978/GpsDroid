@@ -4,12 +4,23 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import kotlin.math.cos
 
 /** Radares: leer el GeoJSON de Radares Anunciados y el DATEX de la DGT, y avisar de los de la ruta. */
 class RadarTest {
     private fun resource(name: String) = javaClass.classLoader!!.getResource(name)!!.readText()
+
+    @Test fun reconoceLaListaDeLa0100() {
+        assertTrue(RadarList.isLegacyCsv("F;"))
+        assertTrue(RadarList.isLegacyCsv("T;"))
+        // La de ahora empieza por la clase: no se puede confundir (hasta la 0.20.0 se borraba).
+        val nueva = RadarList.toCsv(listOf(Radar(RadarKind.FIXED, 40.0, -3.0, "M-30")))
+        assertFalse(RadarList.isLegacyCsv(nueva.take(2)))
+        assertFalse(RadarList.isLegacyCsv(null))
+        assertFalse(RadarList.isLegacyCsv(""))
+    }
 
     @Test fun leeElFeedDeRadaresAnunciados() {
         // Uno de cada clase sacado tal cual del feed (noviembre de 2026).

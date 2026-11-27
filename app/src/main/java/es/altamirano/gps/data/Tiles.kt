@@ -85,7 +85,34 @@ object Tiles {
         }
     }
 
-    private val writer by lazy { SqlTileWriter() }
+    private val writer by lazy { TileDb() }
+
+    /** La caché de osmdroid con dos consultas más (`getDb` es `protected`). */
+    private class TileDb : SqlTileWriter() {
+        /** La caducidad más próxima de una capa (la tesela más vieja), o null si no hay ninguna. */
+        fun oldestExpiry(provider: String): Long? = db?.rawQuery(
+            "SELECT MIN($COLUMN_EXPIRES) FROM ${org.osmdroid.tileprovider.modules.DatabaseFileArchive.TABLE} WHERE " +
+                "${org.osmdroid.tileprovider.modules.DatabaseFileArchive.COLUMN_PROVIDER} = ?", arrayOf(provider))
+            ?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+
+        /** Da por caducadas todas las teselas de una capa: siguen viéndose, pero se renuevan con red. */
+        fun expireAll(provider: String) = db?.execSQL(
+            "UPDATE ${org.osmdroid.tileprovider.modules.DatabaseFileArchive.TABLE} SET $COLUMN_EXPIRES = 0 WHERE " +
+                "${org.osmdroid.tileprovider.modules.DatabaseFileArchive.COLUMN_PROVIDER} = ?", arrayOf(provider))
+    }
+
+    /**
+     * Cuándo se guardó la tesela más vieja de una capa (su caducidad menos el año que se les da), o
+     * null si no hay. Una ya marcada para renovar (caducidad 0) cuenta como «para renovar»: -1.
+     */
+    fun oldestSaved(layer: MapLayer): Long? = runCatching { writer.oldestExpiry(sources.getValue(layer).name()) }.getOrNull()
+        ?.let { if (it <= 0) -1 else it - Configuration.getInstance().expirationOverrideDuration!! }
+
+    /**
+     * Renovar los mapas guardados de una capa: no se borra nada (se siguen viendo sin red); cada tesela
+     * se vuelve a bajar al verla con red, o al repetir la descarga de una zona.
+     */
+    fun renew(layer: MapLayer) = runCatching { writer.expireAll(sources.getValue(layer).name()) }
 
     fun countFor(layer: MapLayer): Long = runCatching { writer.getRowCount(sources.getValue(layer).name()) }.getOrDefault(0L)
 

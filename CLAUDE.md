@@ -36,7 +36,37 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.19.0 (27-nov-2026): los cuadros de rutas se renuevan solos.** Bruno: «que los cuadros que descarga
+**0.20.0 (27-nov-2026): Offline → Actualizaciones.** Bruno: «¿cada cuánto actualiza? Debería poder
+forzarse desde la app: una parte en ajustes que deje descargar radares, BRouter, teselas… que marque si
+hay nuevas y deje descargar».
+- `ui/UpdatesCard` (sección «Actualizaciones» en Offline): por cada cosa, de cuándo es lo del móvil, si
+  hay algo nuevo («Nuevo» en el color terciario y botón relleno) y su botón. Al abrirse, con «Usar la
+  red», un HEAD por fuente (nada se baja):
+  - **Radares**: `Last-Modified` del feed de Radares Anunciados (GitHub Pages) frente a la fecha del
+    fichero, que ahora es la del servidor. «Descargar» / «Volver a bajar» (`Radars.updateRadars`).
+  - **Cámaras de semáforo**: Overpass no da fecha: «Lista del …» y «puede haber cambios» a la semana;
+    «Actualizar» (`Radars.updateRedLights`; puede tardar 40 s o más, y si Overpass está saturado lo dice).
+  - **Datos de rutas**: cada cuadro con su fecha y la del servidor; «Descargar» lanza el trabajo
+    (`DataUpdateWorker.updateRoutesNow`, sólo rutas, cualquier red).
+  - **Mapas guardados**: teselas por capa y fecha de la más vieja (`Tiles.oldestSaved`: caducidad
+    menos el año). El IGN no da fechas: «Renovar <capa>» (`Tiles.renew`) pone `expires = 0` a todas
+    las de la capa (`TileDb`, subclase de `SqlTileWriter` para llegar a `getDb()`, que es
+    `protected`): se siguen viendo sin red y osmdroid las vuelve a bajar al verlas con red (o al
+    repetir la descarga de una zona, que ya salta sólo las no caducadas).
+- `RouteTilesWorker` → **`DataUpdateWorker`, diario** con wifi y batería: radares si la última
+  descarga tiene más de un día (`radars_fetched`), semáforos si tienen más de una semana, y rutas si la
+  última comprobación tiene más de `REFRESH_DAYS` (7). Cancela el trabajo semanal de la 0.19.0
+  (`route-tiles`). Los radares también se siguen renovando al empezar una ruta en coche.
+- **Arreglado: la lista de radares bajada se borraba al leerla** (desde la 0.11.0). La comprobación del
+  formato de la 0.10.0 («F;»/«T;») miraba sólo la primera letra y la de ahora empieza por «FIXED;»: la
+  app usaba siempre la lista que trae de serie. `RadarList.isLegacyCsv`, con su prueba.
+- **Probado en el emulador** (depuración y release): con un cuadro y una lista viejos, «Nuevo» en
+  radares y rutas; «Descargar» en los dos → «al día»; semáforos (a la segunda: la primera, Overpass
+  saturado); «Renovar Topográfico» → 131 teselas con `expires = 0`, y al ver el mapa con red se
+  renovaron las 15 visibles. El trabajo diario, al abrir la app, bajó radares y el cuadro. **Sin probar
+  en el móvil.**
+
+**0.19.0 (27-nov-2026, en Play —prueba interna— el mismo día): los cuadros de rutas se renuevan solos.** Bruno: «que los cuadros que descarga
 de OpenStreetMap caduquen cada x tiempo y se descarguen los nuevos automáticamente» (vino de la Puerta
 de Segovia de La Granja, corregida en OSM el mismo día). Y confirma que **las rutas reales con BRouter
 y sus alternativas y los mapas del camino funcionan** (27-nov-2026).
