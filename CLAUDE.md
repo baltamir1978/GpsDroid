@@ -36,7 +36,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.26.0 (27-nov-2026): Android Auto con el Mapa Base vectorial del IGN.** Bruno: «cuando realizas un
+**0.26.0 (27-nov-2026, en Play —prueba interna— el mismo día; lleva la 0.23.0–0.25.0): Android Auto con el Mapa Base vectorial del IGN.** Play avisa de que deja de admitir 973 modelos (los de 32 bits y x86, por ir sólo arm64): da igual para el Pixel. Bruno: «cuando realizas un
 giro, los títulos de las calles no cambian y permanecen en la dirección en que iba antes, con lo cual se
 quedan al revés». Con teselas raster no tiene arreglo (los rótulos van pintados en la imagen). El IGN
 publica su mapa base en vectorial (CNIG, sin clave): estilo
