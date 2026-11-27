@@ -189,7 +189,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
     override fun onGetTemplate(): Template {
         val strip = ActionStrip.Builder()
             .addAction(icon(R.drawable.car_layers) {
-                CarToast.makeText(carContext, renderer.nextStyle().label, CarToast.LENGTH_SHORT).show()
+                CarToast.makeText(carContext, renderer.nextStyle(), CarToast.LENGTH_SHORT).show()
             })
             .addAction(icon(R.drawable.car_search) { screenManager.push(PointsCarScreen(carContext, { renderer.setHeadingUp(it) }) { w -> routeTo(w) }) })
             // Con una ruta o un track en marcha, este botón es el de pararlo (guardar un punto conduciendo es lo de menos).

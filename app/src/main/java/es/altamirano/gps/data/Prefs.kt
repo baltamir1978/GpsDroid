@@ -45,6 +45,14 @@ class Prefs(context: Context) {
         get() = p.getBoolean("car_heading_up", true)
         set(v) = p.edit().putBoolean("car_heading_up", v).apply()
 
+    /**
+     * El mapa del coche: «vector» (el Mapa Base vectorial del IGN, de serie desde la 0.26.0) o la
+     * clave de un `MapStyle` raster. Aparte del móvil: el coche quiere el callejero, el monte el topográfico.
+     */
+    var carStyle: String
+        get() = p.getString("car_style", null) ?: "vector"
+        set(v) = p.edit().putString("car_style", v).apply()
+
     /** El zoom del mapa del coche: el último que se dejó (Bruno: «selecciona por defecto el zoom que estás viendo»). */
     var carZoom: Double
         get() = p.getFloat("car_zoom", 14f).toDouble()

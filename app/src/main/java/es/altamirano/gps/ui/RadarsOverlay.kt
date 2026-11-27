@@ -49,7 +49,6 @@ class RadarsOverlay(private val density: Float) : Overlay() {
         val box = mapView.boundingBox
         val mLat = (box.latNorth - box.latSouth) * 0.1; val mLon = (box.lonEast - box.lonWest) * 0.1
         val proj = mapView.projection
-        val r = 11f * density
         line.strokeWidth = 3f * density
         line.pathEffect = DashPathEffect(floatArrayOf(8f * density, 6f * density), 0f)
         for (rd in radars) {
@@ -57,7 +56,7 @@ class RadarsOverlay(private val density: Float) : Overlay() {
             val endInBox = rd.endLat != null && rd.endLon != null &&
                 rd.endLat in box.latSouth - mLat..box.latNorth + mLat && rd.endLon in box.lonWest - mLon..box.lonEast + mLon
             if (!inBox && !endInBox) continue
-            val color = if (rd.kind == RadarKind.MOBILE || rd.kind == RadarKind.MOBILE_STRETCH) 0xFFEF6C00.toInt() else 0xFFD32F2F.toInt()
+            val color = colorOf(rd)
             proj.toPixels(GeoPoint(rd.lat, rd.lon), pt)
             if (rd.isStretch && rd.endLat != null && rd.endLon != null) {
                 proj.toPixels(GeoPoint(rd.endLat, rd.endLon), pt2)
@@ -69,22 +68,36 @@ class RadarsOverlay(private val density: Float) : Overlay() {
             val x = pt.x.toFloat(); val y = pt.y.toFloat()
             // Derecha aunque el mapa esté girado (el coche, con la dirección arriba).
             c.save(); c.rotate(-mapView.mapOrientation, x, y)
-            if (rd.kind == RadarKind.RED_LIGHT) { drawTrafficLight(c, x, y); c.restore(); continue }
-            ring.color = color
-            ring.strokeWidth = 3.5f * density
-            c.drawCircle(x, y, r, fill)
-            c.drawCircle(x, y, r - 1.5f * density, ring)
-            val limit = rd.maxspeed
-            if (limit != null) {
-                text.textSize = (if (limit >= 100) 9f else 10.5f) * density
-                c.drawText(limit.toString(), x, y + text.textSize * 0.36f, text)
-            } else {
-                // Una cámara: cuerpo y objetivo.
-                c.drawRoundRect(x - 5f * density, y - 3.5f * density, x + 5f * density, y + 3.5f * density, 1.5f * density, 1.5f * density, glyph)
-                fill.color = android.graphics.Color.WHITE
-                c.drawCircle(x, y, 2f * density, fill)
-            }
+            paintRadar(c, x, y, rd)
             c.restore()
+        }
+    }
+
+    /** El color del radar: naranja los móviles, rojo los demás. */
+    fun colorOf(rd: Radar) = if (rd.kind == RadarKind.MOBILE || rd.kind == RadarKind.MOBILE_STRETCH) 0xFFEF6C00.toInt() else 0xFFD32F2F.toInt()
+
+    /**
+     * Una señal de radar (o el semáforo) centrada en ([x], [y]), sin girar. También la usa el mapa
+     * vectorial del coche para hacer sus iconos. Cabe en un cuadrado de 28 dp.
+     */
+    fun paintRadar(c: Canvas, x: Float, y: Float, rd: Radar) {
+        val r = 11f * density
+        val color = colorOf(rd)
+        if (rd.kind == RadarKind.RED_LIGHT) { drawTrafficLight(c, x, y); return }
+        fill.color = android.graphics.Color.WHITE
+        ring.color = color
+        ring.strokeWidth = 3.5f * density
+        c.drawCircle(x, y, r, fill)
+        c.drawCircle(x, y, r - 1.5f * density, ring)
+        val limit = rd.maxspeed
+        if (limit != null) {
+            text.textSize = (if (limit >= 100) 9f else 10.5f) * density
+            c.drawText(limit.toString(), x, y + text.textSize * 0.36f, text)
+        } else {
+            // Una cámara: cuerpo y objetivo.
+            c.drawRoundRect(x - 5f * density, y - 3.5f * density, x + 5f * density, y + 3.5f * density, 1.5f * density, 1.5f * density, glyph)
+            fill.color = android.graphics.Color.WHITE
+            c.drawCircle(x, y, 2f * density, fill)
         }
     }
 

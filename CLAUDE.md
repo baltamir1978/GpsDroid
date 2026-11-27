@@ -36,6 +36,49 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.26.0 (27-nov-2026): Android Auto con el Mapa Base vectorial del IGN.** Bruno: «cuando realizas un
+giro, los títulos de las calles no cambian y permanecen en la dirección en que iba antes, con lo cual se
+quedan al revés». Con teselas raster no tiene arreglo (los rótulos van pintados en la imagen). El IGN
+publica su mapa base en vectorial (CNIG, sin clave): estilo
+`vt-mapabase.idee.es/files/styles/mapaBase_scn_color1_CNIG.json`, teselas `.pbf` hasta z17, fuentes
+Noto Sans, sprites y relieve (`xyz-mdt.idee.es`). Bruno eligió esa opción («hazlo»).
+- **MapLibre `android-sdk-opengl` 13.7.1** (15-oct-2026). La variante de serie (`android-sdk`) dibuja con
+  Vulkan y colgaba el emulador; OpenGL es la probada con `TextureView` y pantallas virtuales.
+  `abiFilters` arm64-v8a y x86_64 (sin eso el APK cargaba con las cuatro librerías nativas).
+- `car/CarMap` (interfaz) con dos motores: `VectorCarMap` (nuevo, de serie) y `OsmCarMap` (el
+  `CarMapRenderer` de antes, para topográfico, satélite, híbrido e IGN Base, con lo descargado).
+  `CarMapRenderer` es ahora el que los alterna con el botón de capas (Callejero → Topográfico → …), suelta
+  uno y monta el otro sobre la misma `Surface` con lo último (posición, ruta, tarjeta). `Prefs.carStyle`
+  («vector» de serie) aparte del estilo del móvil.
+- `VectorCarMap`: pantalla virtual + `Presentation` como antes; `MapView` de MapLibre en modo
+  `TextureView`, gestos apagados (los manda el coche: `scrollBy(-dx, -dy)`, zoom). Encima, capas GeoJSON:
+  alternativas y ruta elegida (con borde blanco), lo andado, lo que queda (con borde), hueco discontinuo,
+  track grabado, línea al destino, tramos de radar, puntos (círculo + nombre en Noto Sans Bold), radares
+  (iconos hechos con `RadarsOverlay.paintRadar`, derechos con `ICON_ROTATION_ALIGNMENT_VIEWPORT`, desde
+  z10) y posición (flecha que gira con el mapa, punto o punto gris). Los mapas de bits llevan
+  `density` = dpi del coche (MapLibre los toma en dp). Velocidad, tarjeta y «© IGN · Mapa Base» en una
+  vista encima (`Hud`; `SpeedOverlay`/`ManeuverOverlay` tienen ahora `paint(c, w, h)`). Cámara:
+  `easeCamera` lineal de 900 ms por posición; con la dirección arriba, el coche al 70 % (por `padding`).
+  De noche, un velo negro al 40 % debajo de la ruta. Sin red, `MapLibre.setConnected(false)`.
+- Zoom: MapLibre cuenta con teselas de 512: su zoom = `Prefs.carZoom` − 1 (misma escala que osmdroid).
+- Sin conexión: la caché de MapLibre (lo visto) subida a 1 GB. **Las zonas descargadas en Offline son
+  raster y no valen para el vectorial**: sin cobertura y en sitio no visitado, el callejero sale vacío
+  (el botón de capas lleva al topográfico, que sí usa lo descargado). Pendiente: descarga del vectorial.
+- `ui/visibleRadars` (función suelta, la usan los dos motores).
+- **Prueba en el emulador** (`src/debug/.../CarMapTestActivity`, sólo en depuración: monta el mapa del
+  coche sobre una `TextureView` de 1280×640 a 160 dpi, simula ir por la Castellana al norte, al este y al
+  sur y guarda `files/carmap-N.png`). El AVD `prueba` (ATD) no dibuja nada; hace falta el **AVD `visor`**
+  (AOSP 35 normal, creado el 27-nov) con **`-gpu host`**: con `swiftshader_indirect` los rótulos e iconos
+  de MapLibre salen como manchas. Visto: el mapa pinta, gira con la marcha y los nombres siguen derechos;
+  flecha de posición abajo, radares con su límite, semáforos, puntos con nombre, línea al destino,
+  tarjeta, velocidad. **Sin ver**: la ruta y la vista previa (la prueba no simula seguir una ruta),
+  la noche, el cambio de capas y todo en el coche de verdad.
+- La **release sólo lleva arm64-v8a** (`buildTypes.release.ndk.abiFilters`): con x86_64 el AAB pasaba
+  de 10 MB (13,6) y el navegador no lo sube a Play; queda en 9,7 MB y el APK en 15 MB. La depuración
+  lleva las dos. Para probar la release (R8) en el emulador se compiló una vez, aparte, con x86_64 y
+  `src/debug` añadido a la release (`kotlin.directories`/`java.directories` y su manifiesto; con
+  `java.srcDir` a secas el Kotlin integrado de AGP 9 no lo compila): el mapa vectorial pinta igual.
+
 **0.25.0 (27-nov-2026): ruta sin señal, desde la bola gris.** Bruno: al arrancar en el garaje, sin
 GPS, el coche dijo que esperaría a tener señal para enseñar la ruta; «debería marcármela desde el último
 lugar en el que me ha detectado, donde estaba la pelota gris».

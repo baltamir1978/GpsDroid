@@ -35,16 +35,18 @@ class ManeuverOverlay(private val density: Float) : Overlay() {
 
     override fun draw(c: Canvas, mapView: MapView, shadow: Boolean) {
         if (shadow) return
-        val p = panel ?: return
+        panel ?: return
         // En la esquina de la pantalla, sin el giro del mapa.
         val pj = mapView.projection
         pj.save(c, false, false)
-        try { drawPanel(c, mapView, p) } finally { pj.restore(c, false) }
+        try { paint(c, mapView.width, mapView.height) } finally { pj.restore(c, false) }
     }
 
-    private fun drawPanel(c: Canvas, mapView: MapView, p: Panel) {
+    /** Pinta la tarjeta en un lienzo sin girar de [w]×[h] (también el del mapa vectorial). */
+    fun paint(c: Canvas, w: Int, h: Int) {
+        val p = panel ?: return
         val d = density
-        val a = area ?: Rect(0, 0, mapView.width, mapView.height)
+        val a = area ?: Rect(0, 0, w, h)
         val pad = 10f * d
         val iconS = if (p.icon != null) 46f * d else 0f
         val gap = if (p.icon != null) 10f * d else 0f

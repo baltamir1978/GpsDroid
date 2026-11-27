@@ -65,7 +65,7 @@ ubicación por red ni servicios de Google.
   elegir; en el mapa salen como señales (con su límite) yendo a más de 20 km/h o con una ruta en coche;
   en Android Auto, además, la velocidad en una esquina y el mapa con la dirección de la marcha hacia
   arriba (o el norte, a elegir).
-- **Android Auto**: el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
+- **Android Auto**: de serie el Mapa Base vectorial del IGN (dibujado en el móvil con MapLibre: los nombres de las calles siguen derechos al girar), y con el botón de capas los mapas de siempre (topográfico, satélite, híbrido, IGN Base, también los descargados); el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
   que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
   distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador. En GrapheneOS necesita Google Play aislado y Android Auto; y, como
   la app no viene de Google Play, hay que activar **«Fuentes desconocidas»** en los ajustes de

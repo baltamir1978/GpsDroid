@@ -25,17 +25,19 @@ class SpeedOverlay(private val density: Float) : Overlay() {
 
     override fun draw(c: Canvas, mapView: MapView, shadow: Boolean) {
         if (shadow) return
-        val v = speedKmh ?: return
+        speedKmh ?: return
         // En la esquina de la pantalla, no del mapa: sin el giro del mapa (como la escala de osmdroid).
         val pj = mapView.projection
         pj.save(c, false, false)
-        try { drawBadge(c, mapView, v) } finally { pj.restore(c, false) }
+        try { paint(c, mapView.width, mapView.height) } finally { pj.restore(c, false) }
     }
 
-    private fun drawBadge(c: Canvas, mapView: MapView, v: Int) {
+    /** Pinta la velocidad en un lienzo sin girar de [w]×[h] (también el del mapa vectorial). */
+    fun paint(c: Canvas, w: Int, h: Int) {
+        val v = speedKmh ?: return
         val over = limitKmh?.let { v > it } == true
         val r = 30f * density
-        val a = area ?: Rect(0, 0, mapView.width, mapView.height)
+        val a = area ?: Rect(0, 0, w, h)
         // Abajo a la izquierda, separado del borde; encima de la escala de osmdroid no hay nada ahí.
         val cx = a.left + 16f * density + r
         val cy = a.bottom - 16f * density - r

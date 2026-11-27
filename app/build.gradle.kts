@@ -13,8 +13,8 @@ android {
         applicationId = "es.altamirano.gps"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 40
-        versionName = "0.25.0"
+        versionCode = 41
+        versionName = "0.26.0"
     }
 
     // La clave de release vive fuera del repositorio; sin ella la release sale sin firmar.
@@ -30,7 +30,11 @@ android {
     }
 
     buildTypes {
+        // MapLibre trae código nativo: en depuración, el del Pixel y el del emulador; en la release sólo
+        // el del Pixel (el AAB tiene que bajar de 10 MB para subirlo a Play desde el navegador).
+        debug { ndk { abiFilters += listOf("arm64-v8a", "x86_64") } }
         release {
+            ndk { abiFilters += listOf("arm64-v8a") }
             if (releaseKey != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
@@ -62,6 +66,7 @@ dependencies {
     implementation(libs.osmdroid)
     implementation(libs.brouter.core)   // rutas sin conexión, dentro de la app
     implementation(libs.car.app)
+    implementation(libs.maplibre)      // mapa vectorial del IGN en el coche
     implementation(libs.work.runtime)   // cuadros de rutas al día en segundo plano
     testImplementation(libs.junit)
     // org.json viene con Android, pero en las pruebas de JVM sólo hay esqueletos: la de verdad para leer el GeoJSON de radares.

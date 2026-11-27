@@ -118,12 +118,7 @@ class MapScene(context: Context, density: Float, carMode: Boolean = false) {
     }
 
     /** Los radares que se pueden enseñar, según los ajustes (clases elegidas, avisos encendidos y la fecha de hoy). */
-    fun setRadars(context: Context) {
-        val s = es.altamirano.gps.data.Radars.settings(context)
-        val today = java.time.LocalDate.now().toString()
-        radars.radars = if (!s.enabled) emptyList()
-            else es.altamirano.gps.data.Radars.list(context).filter { it.kind in s.kinds && it.validOn(today) }
-    }
+    fun setRadars(context: Context) { radars.radars = visibleRadars(context) }
 
     private var followed: FollowRoute? = null
     private var followedSplit = -1
@@ -316,4 +311,12 @@ class WaypointsOverlay(private val density: Float) : Overlay() {
         cb(GeoPoint(g.latitude, g.longitude))
         return true
     }
+}
+
+/** Los radares que se pueden enseñar, según los ajustes (clases elegidas, avisos encendidos y la fecha de hoy). */
+fun visibleRadars(context: Context): List<es.altamirano.gps.core.Radar> {
+    val s = es.altamirano.gps.data.Radars.settings(context)
+    val today = java.time.LocalDate.now().toString()
+    return if (!s.enabled) emptyList()
+        else es.altamirano.gps.data.Radars.list(context).filter { it.kind in s.kinds && it.validOn(today) }
 }

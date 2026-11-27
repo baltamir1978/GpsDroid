@@ -15,6 +15,9 @@ brouter = "v1.7.9"
 carApp = "1.7.0"
 # Para mantener al día los cuadros de rutas en segundo plano (como TiempoDroid).
 work = "2.12.0"
+# Mapa vectorial del IGN en el coche (rótulos siempre derechos al girar). 13.7.1: 15-oct-2026.
+# La variante OpenGL: la de serie dibuja con Vulkan y colgaba el emulador; OpenGL es la probada con TextureView y pantallas virtuales.
+maplibre = "13.7.1"
 junit = "4.13.2"
 
 [libraries]
@@ -31,6 +34,7 @@ coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-androi
 osmdroid = { module = "org.osmdroid:osmdroid-android", version.ref = "osmdroid" }
 brouter-core = { module = "com.github.abrensch.brouter:brouter-core", version.ref = "brouter" }
 car-app = { module = "androidx.car.app:app", version.ref = "carApp" }
+maplibre = { module = "org.maplibre.gl:android-sdk-opengl", version.ref = "maplibre" }
 work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 junit = { module = "junit:junit", version.ref = "junit" }
 

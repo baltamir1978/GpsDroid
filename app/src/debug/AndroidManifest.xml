@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sólo en depuración: probar el mapa del coche en el emulador (no hay Android Auto aquí). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name=".car.CarMapTestActivity" android:exported="true" />
+    </application>
+</manifest>
