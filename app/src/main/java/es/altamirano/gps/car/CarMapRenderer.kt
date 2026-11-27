@@ -98,7 +98,7 @@ class CarMapRenderer(private val ctx: Context, private val dark: Boolean) : Surf
 
     private fun loadStyle(m: MapLibreMap) {
         m.setMaxZoomPreference(style.viewMaxZoom - 1.0)
-        MapStyles.apply(m, style) { st ->
+        MapStyles.apply(m, style, layers) { st ->
             if (map !== m) return@apply
             layers?.install(st)
             redraw()

@@ -94,7 +94,17 @@ class GpsLayers(private val ctx: Context, private val density: Float, private va
         private const val RADAR_MIN_ZOOM = 10f
     }
 
-    private fun source(id: String) = style?.getSourceAs<GeoJsonSource>(id)
+    /**
+     * El estilo, sólo si está cargado del todo. Al cambiar de mapa MapLibre invalida el anterior y,
+     * si algo (la posición, cada segundo) lo toca, cierra la app: «Calling getSourceAs when a newer
+     * style is loading» (le pasó a Bruno con la 0.27.0).
+     */
+    private val live: Style? get() = style?.takeIf { it.isFullyLoaded }
+
+    private fun source(id: String) = live?.getSourceAs<GeoJsonSource>(id)
+
+    /** Antes de cambiar de estilo: las capas se sueltan del actual hasta que [install] las ponga en el nuevo. */
+    fun detach() { style = null }
 
     /** Pone las capas de la app en un estilo recién cargado y les da lo último que se sabía. */
     fun install(st: Style) {
@@ -208,7 +218,7 @@ class GpsLayers(private val ctx: Context, private val density: Float, private va
     /** Los radares que se pueden enseñar, según los ajustes (al empezar y cuando cambian). */
     fun reloadRadars() {
         radars = visibleRadars(ctx)
-        val st = style ?: return
+        val st = live ?: return
         val icons = HashSet<String>()
         val features = ArrayList<Feature>()
         val stretches = ArrayList<Feature>()
@@ -330,7 +340,7 @@ class GpsLayers(private val ctx: Context, private val density: Float, private va
 
     /** Radares: sólo yendo en coche (a más de 20 km/h, dos minutos después, o con una ruta en coche). */
     private fun pushRadarVisibility() {
-        val st = style ?: return
+        val st = live ?: return
         radarMarks.update(location, following)
         val show = radarMarks.visible && radars.isNotEmpty()
         if (show == radarsShown) return

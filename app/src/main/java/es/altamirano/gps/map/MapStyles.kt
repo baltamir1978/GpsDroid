@@ -57,7 +57,8 @@ object MapStyles {
     }
 
     /** Pone [style] en el mapa y llama a [onLoaded] con el estilo ya listo para añadirle las capas de la app. */
-    fun apply(map: MapLibreMap, style: MapStyle, onLoaded: (Style) -> Unit) {
+    fun apply(map: MapLibreMap, style: MapStyle, layers: GpsLayers?, onLoaded: (Style) -> Unit) {
+        layers?.detach()
         when (style) {
             MapStyle.HYBRID -> map.setStyle(Style.Builder().fromUri(MapLayer.VECTOR_STYLE_URL)) { st ->
                 // Del vectorial, sólo rótulos e iconos; debajo de todo, la ortofoto.

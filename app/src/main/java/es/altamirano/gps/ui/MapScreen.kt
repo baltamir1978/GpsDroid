@@ -236,7 +236,7 @@ fun MapScreen() {
         val m = map ?: return@LaunchedEffect
         prefs.style = style
         m.setMaxZoomPreference(style.viewMaxZoom - 1.0)
-        MapStyles.apply(m, style) { st -> layers.install(st) }
+        MapStyles.apply(m, style, layers) { st -> layers.install(st) }
     }
     LaunchedEffect(online) { prefs.online = online; Tiles.setOnline(online) }
     LaunchedEffect(Unit) { mapView.keepScreenOn = prefs.keepScreenOn }
