@@ -36,7 +36,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.21.0 (27-nov-2026): buscar un portal concreto.** Bruno: «cuando busco Alonso Cano 56 me encuentra la
+**0.21.0 (27-nov-2026, en Play —prueba interna— el mismo día; lleva la 0.20.0, que no se publicó sola): buscar un portal concreto.** Bruno: «cuando busco Alonso Cano 56 me encuentra la
 calle en varios resultados, pero no el número exacto». OpenStreetMap no tiene los portales de muchas
 calles (de Alonso Cano, en Madrid, ninguno: ni Photon ni Nominatim pueden darlo).
 - Con un número suelto en lo buscado (`PlaceSearch.looksLikeAddress`: «alonso cano 56», «mayor 3b»;
