@@ -36,7 +36,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.18.0 (27-nov-2026): buscar un sitio y llevar allí la ruta.** Bruno, de la lista de pendientes («ruta
+**0.18.0 (27-nov-2026, en Play —prueba interna— el mismo día): buscar un sitio y llevar allí la ruta.** Bruno, de la lista de pendientes («ruta
 desde una pulsación larga en el mapa»): «mejor desde la lupa». Y confirma que **los radares (pitido,
 iconos de radar y semáforo, descarga, ajustes) y todo Android Auto de la 0.11–0.17 van bien** (27-nov-2026).
 - `core/Places.kt`: `PlaceSearch` sobre **Photon** (`photon.komoot.io/api`, buscador libre sobre
