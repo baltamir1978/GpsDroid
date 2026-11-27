@@ -52,6 +52,7 @@ import es.altamirano.gps.core.MapLayer
 import es.altamirano.gps.core.MapStyle
 import es.altamirano.gps.core.OfflineZone
 import es.altamirano.gps.data.Gps
+import es.altamirano.gps.data.RouteTilesWorker
 import es.altamirano.gps.data.Routing
 import es.altamirano.gps.data.Radars
 import es.altamirano.gps.data.RadarSettings
@@ -196,11 +197,24 @@ fun DownloadScreen() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(tile.name, fontSize = 15.sp)
-                        Text(OfflineZone.formatBytes(tile.bytes) + " · bajado el " +
-                            java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.Instant.ofEpochMilli(tile.modified).atZone(java.time.ZoneId.systemDefault())),
+                        Text(OfflineZone.formatBytes(tile.bytes) + " · datos del " + shortDate(tile.modified),
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = { deleteTile = tile }) { Text("Borrar") }
+                }
+            }
+            if (routeTiles.isNotEmpty()) {
+                // Se renuevan solos (RouteTilesWorker); el botón, por si se quiere ya (p. ej. tras
+                // corregir algo en OpenStreetMap: brouter.de tarda un día o dos en recogerlo).
+                val work by remember { RouteTilesWorker.runningFlow(context) }.collectAsState(emptyList())
+                val checking = work.any { !it.state.isFinished }
+                LaunchedEffect(checking) { if (!checking) Routing.refreshTiles(context) }
+                val checked = prefs.routeTilesChecked
+                Text("Se renuevan solos cada semana, con wifi, si OpenStreetMap ha cambiado" +
+                    (if (checked > 0) " (última comprobación: ${shortDate(checked)})." else "."),
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = { RouteTilesWorker.runNow(context) }, enabled = online && !checking) {
+                    Text(if (checking) "Buscando datos nuevos…" else "Buscar datos nuevos ahora")
                 }
             }
             Text("Datos de rutas: © colaboradores de OpenStreetMap (ODbL), preparados por BRouter.", fontSize = 11.sp,
@@ -303,3 +317,6 @@ private fun RadarSettingsCard(context: android.content.Context) {
         }
     }
 }
+
+private fun shortDate(ms: Long): String =
+    java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()))

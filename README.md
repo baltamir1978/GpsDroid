@@ -49,6 +49,8 @@ ubicación por red ni servicios de Google.
   carreteras, calculadas **sin conexión** dentro de la app con el motor de
   [BRouter](https://github.com/abrensch/brouter) y los datos de OpenStreetMap. La primera vez en una
   zona pregunta y baja su cuadro de datos (5° × 5°, de 20 a 170 MB; en Offline se ven y se borran).
+  Los cuadros bajados se renuevan solos cada semana, con wifi, si OpenStreetMap ha cambiado (en
+  Offline, «Buscar datos nuevos ahora» lo hace al momento).
   Antes de empezar se ven en el mapa todas las rutas posibles (hasta cuatro), cada una con su tiempo
   y distancia, para elegir; yendo por una, el botón de las dos flechas enseña las de ese momento. Indicaciones giro a giro en el mapa (sin voz), y
   si te sales (o vas por otro sitio antes de llegar al inicio) calcula otra desde donde estés. En

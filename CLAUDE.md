@@ -36,6 +36,29 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.19.0 (27-nov-2026): los cuadros de rutas se renuevan solos.** Bruno: «que los cuadros que descarga
+de OpenStreetMap caduquen cada x tiempo y se descarguen los nuevos automáticamente» (vino de la Puerta
+de Segovia de La Granja, corregida en OSM el mismo día). Y confirma que **las rutas reales con BRouter
+y sus alternativas y los mapas del camino funcionan** (27-nov-2026).
+- `data/RouteTilesWorker` (WorkManager 2.12.0, dependencia nueva, la misma que TiempoDroid; es de
+  AndroidX, sin servicios de Google): periódico cada `RouteTiles.REFRESH_DAYS` (7) días con red sin
+  coste (`UNMETERED`), batería y espacio; se programa en `GpsApp` (`KEEP`). Con «Usar la red» apagado
+  no hace nada. Hasta 3 reintentos si falla.
+- `Routing.updateOutdated`: HEAD a cada cuadro del móvil (`Last-Modified`) y, si es más nuevo
+  (`RouteTiles.outdated`, 1 min de margen), lo vuelve a bajar. El viejo sirve hasta que el nuevo
+  está entero (`rename`; una ruta en marcha sigue con el que tenía abierto).
+- `Routing.download`: el cuadro bajado toma la **fecha del servidor** (`setLastModified`), que es
+  con lo que se compara luego; los bajados antes de esta versión tienen la de la descarga, y se
+  renuevan en cuanto brouter.de rehaga el suyo. Reanudar ahora manda `If-Range` con la fecha del
+  servidor (guardada en `<cuadro>.rd5.part.date`): si el cuadro cambió a medias, empieza de cero
+  en vez de mezclar dos versiones.
+- Offline → Datos para rutas: «datos del <fecha>», «Se renuevan solos cada semana, con wifi…
+  (última comprobación: …)» y «Buscar datos nuevos ahora» (trabajo único con cualquier red).
+- brouter.de rehace los cuadros a menudo: el `W5_N40` del 27-nov era de esa madrugada (01:03 UTC).
+- **Probado en el emulador** (depuración y release): con un `W5_N40.rd5` falso de 6 bytes y fecha de
+  2020, la primera ejecución al abrir la app bajó el de verdad (91.970.332 bytes, fecha del
+  servidor); el botón, otra pasada en 0,6 s sin bajar nada. **Sin probar en el móvil.**
+
 **0.18.0 (27-nov-2026, en Play —prueba interna— el mismo día): buscar un sitio y llevar allí la ruta.** Bruno, de la lista de pendientes («ruta
 desde una pulsación larga en el mapa»): «mejor desde la lupa». Y confirma que **los radares (pitido,
 iconos de radar y semáforo, descarga, ajustes) y todo Android Auto de la 0.11–0.17 van bien** (27-nov-2026).

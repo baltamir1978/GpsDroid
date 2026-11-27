@@ -25,6 +25,11 @@ class Prefs(context: Context) {
             ?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
         set(v) = p.edit().putString("last", v?.let { "${it.first},${it.second}" }).apply()
 
+    /** Cuándo se miró por última vez si había cuadros de rutas nuevos (0: nunca). */
+    var routeTilesChecked: Long
+        get() = p.getLong("route_tiles_checked", 0L)
+        set(v) = p.edit().putLong("route_tiles_checked", v).apply()
+
     /** Bajar teselas que no están guardadas (con datos móviles cuesta; en el monte no hay). */
     var online: Boolean
         get() = p.getBoolean("online", true)

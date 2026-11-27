@@ -136,6 +136,31 @@ object Routing {
         return File(dir, "${mode.profile}.brf")
     }
 
+    /** La fecha del cuadro en el servidor (`Last-Modified`), o null sin red. */
+    fun remoteModified(name: String): Long? = runCatching {
+        val c = URL("$SEGMENTS_URL$name.rd5").openConnection() as HttpURLConnection
+        c.requestMethod = "HEAD"; c.connectTimeout = 10_000; c.readTimeout = 10_000
+        try { if (c.responseCode == 200) c.lastModified.takeIf { it > 0 } else null } finally { c.disconnect() }
+    }.getOrNull()
+
+    /**
+     * Vuelve a bajar los cuadros del móvil que en brouter.de son más nuevos (OpenStreetMap cambia: una
+     * calle mal etiquetada que se corrige, como la Puerta de Segovia de La Granja). El cuadro viejo se
+     * sigue usando hasta que el nuevo está entero: se cambia con un `rename`, y una ruta que lo tenga
+     * abierto sigue leyendo el de antes. Devuelve los actualizados y el primer error.
+     */
+    suspend fun updateOutdated(context: Context, progress: (String, Long, Long) -> Unit = { _, _, _ -> }): Pair<List<String>, String?> {
+        val updated = mutableListOf<String>()
+        for (tile in segmentsDir(context).listFiles { f -> f.name.endsWith(".rd5") }.orEmpty().sortedBy { it.name }) {
+            val name = tile.nameWithoutExtension
+            val remote = withContext(Dispatchers.IO) { remoteModified(name) }
+            if (!RouteTiles.outdated(tile.lastModified(), remote)) continue
+            download(context, name) { got, total -> progress(name, got, total) }?.let { return updated to it }
+            updated += name
+        }
+        return updated to null
+    }
+
     /** Lo que pesa un cuadro (pregunta al servidor), o null sin red. */
     fun remoteSize(name: String): Long? = runCatching {
         val c = URL("$SEGMENTS_URL$name.rd5").openConnection() as HttpURLConnection
@@ -145,19 +170,30 @@ object Routing {
 
     /**
      * Baja un cuadro a `<nombre>.rd5.part` y lo renombra al acabar: uno a medias nunca se usa. Si se
-     * corta, la vez siguiente sigue donde se quedó (`Range`). [progress]: bytes bajados y total.
+     * corta, la vez siguiente sigue donde se quedó (`Range`), pero sólo si el del servidor no ha cambiado
+     * entretanto (`If-Range` con su fecha, guardada en `.part.date`): si no, se mezclarían dos versiones
+     * y empieza de cero. El cuadro bajado se queda con la fecha del servidor, para saber luego si está
+     * viejo ([updateOutdated]). [progress]: bytes bajados y total.
      */
     suspend fun download(context: Context, name: String, progress: (Long, Long) -> Unit): String? = withContext(Dispatchers.IO) {
         val dir = segmentsDir(context)
         val part = File(dir, "$name.rd5.part")
+        val partDate = File(dir, "$name.rd5.part.date")
         val done = File(dir, "$name.rd5")
         try {
             val have = part.length()
+            val since = partDate.takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull()
             val c = URL("$SEGMENTS_URL$name.rd5").openConnection() as HttpURLConnection
             c.connectTimeout = 15_000; c.readTimeout = 30_000
-            if (have > 0) c.setRequestProperty("Range", "bytes=$have-")
+            var serverDate = 0L
+            if (have > 0 && since != null) {
+                c.setRequestProperty("Range", "bytes=$have-")
+                c.setRequestProperty("If-Range", httpDate(since))
+            }
             try {
                 val code = c.responseCode
+                serverDate = c.lastModified
+                if (serverDate > 0) partDate.writeText(serverDate.toString())
                 if (code == 404) return@withContext "No hay datos de rutas para esa zona ($name)"
                 if (code != 200 && code != 206) return@withContext "El servidor de BRouter ha respondido $code"
                 val resumed = code == 206
@@ -181,7 +217,9 @@ object Routing {
                     if (total > 0 && got != total) return@withContext "La descarga se ha cortado: vuelve a intentarlo (sigue donde se quedó)"
                 }
             } finally { c.disconnect() }
+            if (serverDate > 0) part.setLastModified(serverDate)
             if (!part.renameTo(done)) return@withContext "No se pudo guardar el cuadro"
+            partDate.delete()
             refreshTiles(context)
             null
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -191,6 +229,9 @@ object Routing {
             "Sin conexión con el servidor de BRouter: vuelve a intentarlo (sigue donde se quedó)"
         }
     }
+
+    private fun httpDate(ms: Long): String =
+        java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.UTC))
 
     /** Los errores del motor, en cristiano. */
     fun message(raw: String): String = when {

@@ -7,6 +7,16 @@ import kotlin.math.roundToInt
  * de 40° N a 45° N, Madrid y media España central). Cada cuadro se nombra por su esquina suroeste.
  */
 object RouteTiles {
+    /** Cada cuánto se miran en el servidor los cuadros bajados (con wifi): brouter.de los rehace a menudo. */
+    const val REFRESH_DAYS = 7L
+
+    /**
+     * Si hay que volver a bajar un cuadro: el del servidor ([remoteMs], su `Last-Modified`) es más
+     * nuevo que el del móvil ([localMs], que al bajarlo toma la fecha del servidor; los bajados antes
+     * de la 0.19, la de la descarga). Un minuto de margen por los relojes y el redondeo a segundos de HTTP.
+     */
+    fun outdated(localMs: Long, remoteMs: Long?): Boolean = remoteMs != null && remoteMs > localMs + 60_000
+
     fun nameAt(lat: Double, lon: Double): String {
         val lon5 = Math.floorDiv(kotlin.math.floor(lon).toInt(), 5) * 5
         val lat5 = Math.floorDiv(kotlin.math.floor(lat).toInt(), 5) * 5

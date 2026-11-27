@@ -1,6 +1,8 @@
 package es.altamirano.gps.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -111,6 +113,15 @@ class RouteTest {
         // Madrid → Sierra: un cuadro. Madrid → Barcelona: dos.
         assertEquals(listOf("W5_N40"), RouteTiles.between(40.4168 to -3.7038, 40.79 to -3.98))
         assertEquals(listOf("W5_N40", "E0_N40"), RouteTiles.between(40.4168 to -3.7038, 41.39 to 2.17))
+    }
+
+    @Test fun cuadrosViejos() {
+        val bajado = 1_795_000_000_000L
+        assertTrue(RouteTiles.outdated(bajado, bajado + 86_400_000))      // rehecho al día siguiente
+        assertFalse(RouteTiles.outdated(bajado, bajado))                   // el mismo
+        assertFalse(RouteTiles.outdated(bajado, bajado + 30_000))          // redondeo de HTTP
+        assertFalse(RouteTiles.outdated(bajado, bajado - 86_400_000))      // el del móvil es más nuevo
+        assertFalse(RouteTiles.outdated(bajado, null))                     // sin red o sin cabecera
     }
 
     @Test fun distanciasComoSeDicen() {

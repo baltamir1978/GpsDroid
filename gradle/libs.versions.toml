@@ -13,6 +13,8 @@ osmdroid = "6.1.20"
 brouter = "v1.7.9"
 # Android Auto (plantillas de la Car App Library; la 1.8 aún no es estable).
 carApp = "1.7.0"
+# Para mantener al día los cuadros de rutas en segundo plano (como TiempoDroid).
+work = "2.12.0"
 junit = "4.13.2"
 
 [libraries]
@@ -29,6 +31,7 @@ coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-androi
 osmdroid = { module = "org.osmdroid:osmdroid-android", version.ref = "osmdroid" }
 brouter-core = { module = "com.github.abrensch.brouter:brouter-core", version.ref = "brouter" }
 car-app = { module = "androidx.car.app:app", version.ref = "carApp" }
+work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]
