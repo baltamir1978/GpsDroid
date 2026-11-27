@@ -44,7 +44,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.28.1 (27-nov-2026): la app se cerraba al cambiar de mapa.** Bruno: «se me ha cerrado la aplicación
+**0.28.1 (27-nov-2026, en Play —prueba interna— el mismo día; lleva la 0.28.0): la app se cerraba al cambiar de mapa.** Bruno: «se me ha cerrado la aplicación
 de golpe». Reproducido en el emulador cambiando de mapa con la posición moviéndose: al pedir un estilo
 nuevo MapLibre invalida el anterior y `GpsLayers` le seguía escribiendo la posición (cada segundo) →
 `IllegalStateException: Calling getSourceAs when a newer style is loading/has loaded`. Ahora
