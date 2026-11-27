@@ -44,4 +44,9 @@ class Prefs(context: Context) {
     var carHeadingUp: Boolean
         get() = p.getBoolean("car_heading_up", true)
         set(v) = p.edit().putBoolean("car_heading_up", v).apply()
+
+    /** El zoom del mapa del coche: el último que se dejó (Bruno: «selecciona por defecto el zoom que estás viendo»). */
+    var carZoom: Double
+        get() = p.getFloat("car_zoom", 14f).toDouble()
+        set(v) = p.edit().putFloat("car_zoom", v.toFloat()).apply()
 }

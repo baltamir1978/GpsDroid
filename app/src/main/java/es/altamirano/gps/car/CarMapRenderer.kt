@@ -43,11 +43,15 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     private var track: List<TrackPoint> = emptyList()
     private var following: FollowState? = null
     /**
-     * Al abrir, un zoom de carretera, independiente del móvil (heredar el suyo dejaba el coche muy
-     * cerca); lo que se cambie con los botones vale mientras dure la sesión del coche.
+     * Un zoom propio del coche, independiente del móvil (heredar el suyo dejaba el coche muy cerca):
+     * el último que se dejó, guardado; la primera vez, [Prefs.carZoom] por defecto (14).
      */
-    private var zoom = START_ZOOM
+    private var zoom = prefs.carZoom
     private var speed: SpeedOverlay? = null
+    private var maneuverOverlay: ManeuverOverlay? = null
+    private var panel: ManeuverOverlay.Panel? = null
+    /** Tras un pellizco, el zoom a un nivel entero: con medio nivel las teselas del IGN se estiran y los rótulos se pixelan. */
+    private val snapZoom = Runnable { setZoom(kotlin.math.round(zoom)) }
 
     var style: MapStyle = prefs.style
         private set
@@ -90,6 +94,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
             sc.install(this)
             overlays += ScaleBarOverlay(this).apply { setScaleBarOffset((16 * density).toInt(), (16 * density).toInt()) }
             overlays += SpeedOverlay(density).also { speed = it; it.area = visible }
+            overlays += ManeuverOverlay(density).also { mo -> mo.area = visible; mo.panel = panel; maneuverOverlay = mo }
             controller.setZoom(zoom)
             val start = location ?: prefs.last?.let { l -> Location("").apply { latitude = l.first; longitude = l.second } }
             controller.setCenter(start?.let { GeoPoint(it.latitude, it.longitude) } ?: GeoPoint(40.2, -3.7))
@@ -109,6 +114,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     override fun onVisibleAreaChanged(visibleArea: Rect) {
         visible = visibleArea
         speed?.area = visibleArea
+        maneuverOverlay?.area = visibleArea
         applyVisibleArea(visibleArea)
     }
 
@@ -136,14 +142,23 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
         val m = map ?: return
         // Doble toque: el coche manda un factor fijo (2); pellizco: el cambio de escala, a niveles de zoom.
         setZoom(m.zoomLevelDouble + ln(scaleFactor.toDouble()) / ln(2.0))
+        main.removeCallbacks(snapZoom); main.postDelayed(snapZoom, SNAP_ZOOM_MS)
     }
 
-    fun zoomBy(delta: Double) { val m = map ?: return; setZoom(m.zoomLevelDouble + delta) }
+    fun zoomBy(delta: Double) { val m = map ?: return; setZoom(kotlin.math.round(m.zoomLevelDouble + delta)) }
 
     private fun setZoom(z: Double) {
         val m = map ?: return
         zoom = z.coerceIn(m.minZoomLevel, m.maxZoomLevel)
         m.controller.setZoom(zoom)
+        prefs.carZoom = zoom
+    }
+
+    /** La tarjeta de la maniobra o del destino, pintada en el mapa. */
+    fun setPanel(p: ManeuverOverlay.Panel?) {
+        if (p == panel) return
+        panel = p
+        maneuverOverlay?.let { it.panel = p; map?.invalidate() }
     }
 
     fun nextStyle(): MapStyle {
@@ -231,8 +246,8 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
     }
 
     fun release() {
-        main.removeCallbacks(resumeFollow)
-        speed = null
+        main.removeCallbacks(resumeFollow); main.removeCallbacks(snapZoom)
+        speed = null; maneuverOverlay = null
         map?.let { m -> m.onPause(); scene?.release(m) }
         presentation?.dismiss()
         display?.release()
@@ -241,8 +256,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback {
 
     private companion object {
         const val RESUME_FOLLOW_MS = 15_000L
-        /** Antes, el del móvil (casi siempre 15-16): Bruno lo quería «un punto o dos más arriba». */
-        const val START_ZOOM = 14.0
+        const val SNAP_ZOOM_MS = 600L
         /** 2 m/s, unos 7 km/h. */
         const val HEADING_UP_MIN_SPEED = 2f
         /** Altura del coche en lo visible con la dirección arriba (0 arriba, 1 abajo). */

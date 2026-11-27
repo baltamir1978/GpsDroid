@@ -36,6 +36,23 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.24.0 (27-nov-2026): tarjeta propia en el mapa del coche y zoom recordado.** Bruno, tras probar la
+0.23.0: el cuadro naranja «demasiado grande, debería ser semitransparente y en otro color», una
+esquina negra debajo de su esquina de arriba a la izquierda, los rótulos «mucho más pixelados» y
+«selecciona por defecto el zoom que estás viendo ahora».
+- La tarjeta de Android Auto (`setNavigationInfo`, con `RoutingInfo`/`MessageInfo`) no deja elegir
+  tamaño ni transparencia, y la esquina negra era la suya sobre la esquina redondeada del mapa. Ya no
+  se manda: `car/ManeuverOverlay` la pinta en el mapa, arriba a la izquierda de lo visible, gris azulado
+  oscuro al 75 % (`BACKGROUND`), como mucho 260 dp o el 45 % del ancho: dibujo de la maniobra, distancia,
+  la indicación y «llegada · min · km» (o la flecha, el nombre y el texto sin ruta). Con eso la plantilla
+  ya no se rehace por la tarjeta (sólo por los botones). `step()` queda sin uso por si se vuelve a la del coche.
+- Zoom del coche guardado (`Prefs.carZoom`, 14 la primera vez) y, tras un pellizco, redondeado a un
+  nivel entero a los 600 ms (con medio nivel las teselas se estiran); los botones van a niveles enteros.
+- Lo pixelado no está claro: en la 0.23.0 no cambió nada de las teselas. Puede ser el zoom a medias
+  (arreglado arriba) o el mapa girado con la dirección arriba (las teselas raster giradas pierden
+  nitidez). Pendiente de una foto de Bruno si sigue.
+- **Sin probar en el coche.**
+
 **0.23.0 (27-nov-2026): Android Auto con más pinta de navegador.** Bruno mandó fotos del coche
 («funciona bastante bien», pero hay cosas de la interfaz que mejorar). Lo que se veía y lo cambiado:
 - La flecha de la maniobra era la flecha suelta girada (la de `arrow()`), que parecía el cursor de

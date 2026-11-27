@@ -124,15 +124,10 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                         }
                         if ((fol != null) != following) { following = fol != null; invalidate() }
                         val newCard = cardFor(loc, t, rec, fol)
-                        if (newCard != card || rec.active != recording) {
-                            // Como mucho cada 2 s (salvo al cambiar de destino o de grabar).
-                            val now = SystemClock.elapsedRealtime()
-                            val important = newCard?.title != card?.title || rec.active != recording
-                            if (important || now - lastInvalidate >= 2000) {
-                                card = newCard; recording = rec.active; lastInvalidate = now
-                                invalidate()
-                            }
-                        }
+                        renderer.setPanel(panelFor(newCard))
+                        // La tarjeta se pinta en el mapa: la plantilla sólo se rehace por los botones (grabar).
+                        card = newCard
+                        if (rec.active != recording) { recording = rec.active; lastInvalidate = SystemClock.elapsedRealtime(); invalidate() }
                     }
             }
         }
@@ -215,28 +210,29 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             .setActionStrip(strip)
             .setMapActionStrip(mapStrip)
             .setPanModeListener { panning -> if (panning) renderer.userMovedMap() }
-            .setBackgroundColor(CarColor.createCustom(MapColors.target.toArgb(), MapColors.target.toArgb()))
-        card?.step?.let { s ->
-            // Yendo por una ruta: la maniobra como la enseñan los navegadores (y el cuadro del coche).
-            val info = RoutingInfo.Builder().setCurrentStep(step(s.kind, s.exit, s.angle, s.cue, s.then == null),
-                if (s.distanceM >= 1000) Distance.create(s.distanceM / 1000.0, Distance.UNIT_KILOMETERS) else Distance.create(s.distanceM.toDouble(), Distance.UNIT_METERS))
-            b.setNavigationInfo(info.build())
-            // Debajo de la maniobra, como en los navegadores: hora de llegada, tiempo y kilómetros que quedan.
-            s.remainingS?.let { secs ->
-                val left = if (s.remainingM >= 1000) Distance.create(s.remainingM / 1000.0, Distance.UNIT_KILOMETERS)
-                    else Distance.create(s.remainingM.toDouble(), Distance.UNIT_METERS)
-                b.setDestinationTravelEstimate(TravelEstimate.Builder(left, java.time.ZonedDateTime.now().plusSeconds(secs))
-                    .setRemainingTimeSeconds(secs).build())
-            }
-            return b.build()
-        }
-        card?.let { c ->
-            val info = MessageInfo.Builder(c.title).setText(c.text)
-            c.arrowDeg?.let { info.setImage(CarIcon.Builder(IconCompat.createWithBitmap(arrow(it))).build()) }
-            b.setNavigationInfo(info.build())
-        }
+        // La tarjeta de la maniobra o del destino ya no va en la plantilla (la de Android Auto, grande,
+        // opaca y con una esquina negra): la pinta el mapa (ManeuverOverlay, vía panelFor).
         return b.build()
     }
+
+    /** Lo que enseña la tarjeta del mapa para [c]. */
+    private fun panelFor(c: Card?): ManeuverOverlay.Panel? {
+        c ?: return null
+        val s = c.step ?: return ManeuverOverlay.Panel(c.arrowDeg?.let { arrow(it) }, c.title, c.text.ifBlank { null }, null)
+        val dist = if (s.distanceM >= 1000) Geo.formatDistance(s.distanceM.toDouble()) else "${s.distanceM} m"
+        // Debajo, como en los navegadores: hora de llegada, minutos y kilómetros que quedan.
+        val left = Geo.formatDistance(s.remainingM.toDouble())
+        val small = s.remainingS?.let { secs ->
+            val at = java.time.LocalTime.now().plusSeconds(secs).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+            val min = (secs / 60).toInt()
+            val t = if (min >= 60) "${min / 60} h ${min % 60} min" else "$min min"
+            "$at · $t · $left"
+        } ?: "Quedan $left"
+        return ManeuverOverlay.Panel(icons.getOrPut(s.kind to s.angle) { maneuverIcon(s.kind, s.angle) }, dist, s.cue, small)
+    }
+
+    /** Los dibujos de maniobra ya hechos (se piden a cada posición). */
+    private val icons = HashMap<Pair<MKind, Int>, Bitmap>()
 
     private fun step(kind: MKind, exit: Int, angle: Int, cue: String, @Suppress("UNUSED_PARAMETER") last: Boolean): Step {
         val type = when (kind) {
