@@ -46,7 +46,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.31.0 (28-nov-2026): Android Auto — parar la ruta, menos datos, «Usar la red», head-up y cuadro.** Bruno,
+**0.31.0 (28-nov-2026, en Play —prueba interna— el mismo día): Android Auto — parar la ruta, menos datos, «Usar la red», head-up y cuadro.** Bruno,
 tras probar en el coche: al elegir destino y dar «Empezar» no había botón para cancelar la ruta (quería
 una X); la grabación va bien aunque se haga otra cosa; «consume mucha conexión de datos porque se me corta
 la radio por internet»; no hay botón de con o sin conexión en Android Auto; y su coche tiene, además de la
