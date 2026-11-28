@@ -54,6 +54,8 @@
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.NAVIGATION" />
+                <!-- El mapa también en el cuadro de instrumentos (ClusterCarScreen), si el coche lo tiene. -->
+                <category android:name="androidx.car.app.category.FEATURE_CLUSTER" />
             </intent-filter>
         </service>
         <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />

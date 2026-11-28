@@ -187,7 +187,7 @@ class FollowService : Service() {
         nm.cancel(ALERT_ID)
         Gps.acquire(OWNER)
         // Con red ahora, los mapas de todo el camino (±500 m): más adelante puede no haber cobertura.
-        Tiles.saveAlong(this, st.route.points)
+        Tiles.saveAlong(this, st.route.points, car = st.nav?.mode == TravelMode.CAR)
         var follower = TrackFollower(st.route)
         var route = st.route
         // Antes de llegar a la ruta: lo más cerca que has estado de ella (para ver si te alejas).
@@ -260,7 +260,7 @@ class FollowService : Service() {
                 is Routing.Result.Ok -> {
                     val guide = RouteGuide(r.route, nav.mode.announceM)
                     Following.set(cur.copy(route = guide.follow, fix = null, nav = curNav.copy(guide = guide, next = null, rerouting = false)))
-                    Tiles.saveAlong(this@FollowService, r.route.points)
+                    Tiles.saveAlong(this@FollowService, r.route.points, car = nav.mode == TravelMode.CAR)
                 }
                 // Sin ruta nueva se sigue con la de antes (y la flecha hacia ella); se reintenta más tarde.
                 is Routing.Result.Failed, is Routing.Result.MissingTiles -> Following.set(cur.copy(nav = curNav.copy(rerouting = false)))

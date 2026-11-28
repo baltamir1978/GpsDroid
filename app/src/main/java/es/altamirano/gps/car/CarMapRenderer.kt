@@ -85,16 +85,20 @@ class CarMapRenderer(private val ctx: Context, private val dark: Boolean) : Surf
 
     fun userMovedMap() { follow = false; main.removeCallbacks(resumeFollow); main.postDelayed(resumeFollow, RESUME_FOLLOW_MS) }
 
-    /** En el coche, el orden del botón de capas: el callejero primero. */
-    private val carStyles = listOf(MapStyle.BASE, MapStyle.TOPO, MapStyle.ORTHO, MapStyle.HYBRID)
+    /** El mapa que se ve ahora. */
+    val currentStyle: MapStyle get() = style
 
-    /** Pasa al mapa siguiente; devuelve su nombre para el aviso. */
-    fun nextStyle(): String {
-        style = carStyles[(carStyles.indexOf(style) + 1) % carStyles.size]
-        prefs.carStyle = style.key
+    /** Cambia de mapa (desde la pantalla «Mapa» del coche). */
+    fun setStyle(s: MapStyle) {
+        if (s == style) return
+        style = s
+        prefs.carStyle = s.key
         map?.let { m -> loadStyle(m) }
-        return style.label
+        styleChanges.value++
     }
+
+    /** Vuelve a leer el mapa elegido (el del cuadro de instrumentos sigue al de la pantalla principal). */
+    fun reloadStyleFromPrefs() = setStyle(MapStyle.fromKey(prefs.carStyle.let { if (it == "vector") MapStyle.BASE.key else it }))
 
     private fun loadStyle(m: MapLibreMap) {
         m.setMaxZoomPreference(style.viewMaxZoom - 1.0)
@@ -292,10 +296,14 @@ class CarMapRenderer(private val ctx: Context, private val dark: Boolean) : Surf
         }
     }
 
-    private companion object {
-        const val RESUME_FOLLOW_MS = 15_000L
-        const val HEADING_UP_MIN_SPEED = 2f
-        const val HEADING_UP_Y = 0.7f
-        const val MIN_ZOOM = 4.0
+    companion object {
+        /** En el coche, los mapas que se pueden elegir: el callejero primero. */
+        val CAR_STYLES = listOf(MapStyle.BASE, MapStyle.TOPO, MapStyle.ORTHO, MapStyle.HYBRID)
+        /** Sube cada vez que se elige otro mapa (lo escucha el del cuadro de instrumentos). */
+        val styleChanges = kotlinx.coroutines.flow.MutableStateFlow(0)
+        private const val RESUME_FOLLOW_MS = 15_000L
+        private const val HEADING_UP_MIN_SPEED = 2f
+        private const val HEADING_UP_Y = 0.7f
+        private const val MIN_ZOOM = 4.0
     }
 }

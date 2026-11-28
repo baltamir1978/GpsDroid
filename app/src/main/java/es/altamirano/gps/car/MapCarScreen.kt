@@ -32,6 +32,9 @@ import es.altamirano.gps.core.Maneuver.Kind as MKind
 import androidx.car.app.model.Distance
 import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.car.app.navigation.model.TravelEstimate
+import androidx.car.app.navigation.model.Trip
+import androidx.car.app.navigation.model.Destination
+import java.time.ZonedDateTime
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -74,10 +77,14 @@ class MapCarScreen(car: CarContext) : Screen(car) {
     private data class StepCard(val kind: MKind, val exit: Int, val angle: Int, val distanceM: Int,
                                 val cue: String, val then: String?,
                                 /** Lo que queda hasta el destino (a 100 m) y en segundos (al minuto), para la línea de abajo. */
-                                val remainingM: Int = 0, val remainingS: Long? = null)
+                                val remainingM: Int = 0, val remainingS: Long? = null,
+                                /** La maniobra sola (sin el radar) y el destino, para el head-up y el cuadro. */
+                                val name: String = cue, val destName: String = "")
 
-    /** Se le ha dicho al coche que estamos navegando (para el cuadro de instrumentos y su botón de parar). */
+    /** Hay una ruta en marcha (para los botones). */
     private var navigating = false
+    /** Se le ha dicho al coche que estamos navegando (para el cuadro de instrumentos, el head-up y su botón de parar). */
+    private var told = false
     private var following = Following.state.value != null
     private val nav by lazy { carContext.getCarService(NavigationManager::class.java) }
 
@@ -88,13 +95,13 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                 renderer.onFollowChanged = { invalidate() }
                 // El coche puede parar la navegación por su cuenta (sus mandos, otra app de navegación).
                 nav.setNavigationManagerCallback(object : NavigationManagerCallback {
-                    override fun onStopNavigation() { navigating = false; Following.stop(carContext) }
+                    override fun onStopNavigation() { told = false; navigating = false; Following.stop(carContext) }
                 })
             }
             override fun onStart(owner: LifecycleOwner) = Gps.acquire(OWNER)
             override fun onStop(owner: LifecycleOwner) = Gps.release(OWNER)
             override fun onDestroy(owner: LifecycleOwner) {
-                if (navigating) runCatching { nav.navigationEnded() }
+                if (told) runCatching { nav.navigationEnded() }
                 runCatching { nav.clearNavigationManagerCallback() }
                 carContext.getCarService(AppManager::class.java).setSurfaceCallback(null)
                 renderer.release()
@@ -116,17 +123,19 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                         // Empieza o acaba una ruta (desde el móvil o desde aquí): avisar al coche y
                         // cambiar los botones; al empezar, el mapa vuelve a seguirte.
                         val navNow = fol?.nav != null
-                        if (navNow != navigating) {
-                            navigating = navNow
+                        if (navNow != told) {
+                            told = navNow
                             runCatching { if (navNow) nav.navigationStarted() else nav.navigationEnded() }
                             if (navNow) renderer.follow = true
-                            invalidate()
+                            lastTrip = null
                         }
+                        if (navNow != navigating) { navigating = navNow; invalidate() }
                         if ((fol != null) != following) { following = fol != null; invalidate() }
                         val newCard = cardFor(loc, t, rec, fol)
                         renderer.setPanel(panelFor(newCard))
                         // La tarjeta se pinta en el mapa: la plantilla sólo se rehace por los botones (grabar).
                         card = newCard
+                        if (told) sendTrip(newCard, fol)
                         if (rec.active != recording) { recording = rec.active; lastInvalidate = SystemClock.elapsedRealtime(); invalidate() }
                     }
             }
@@ -149,7 +158,8 @@ class MapCarScreen(car: CarContext) : Screen(car) {
                 val radar = fol.radar?.let { r -> " · " + r.copy(distanceM = (r.distanceM / 50).roundToInt() * 50.0).line() } ?: ""
                 return Card(next.maneuver.title(), Following.remainingText(f.copy(remainingM = (f.remainingM / 100).roundToInt() * 100.0)),
                     null, StepCard(next.maneuver.kind, next.maneuver.exit, next.maneuver.angle, d, next.maneuver.title() + radar, next.then?.title(),
-                        (f.remainingM / 100).roundToInt() * 100, f.remainingS?.let { (it + 30) / 60 * 60 }))
+                        (f.remainingM / 100).roundToInt() * 100, f.remainingS?.let { (it + 30) / 60 * 60 },
+                        next.maneuver.title(), fol.nav.destName))
             }
             return followCard(fol, fresh, recText)
         }
@@ -187,11 +197,13 @@ class MapCarScreen(car: CarContext) : Screen(car) {
     }
 
     override fun onGetTemplate(): Template {
+        // Lo de ahora, no lo último que vio la pantalla: mientras se eligía la ruta (otra pantalla encima)
+        // ésta no se entera, y al volver la plantilla se pedía con los botones de antes (sin la X).
+        Following.state.value.let { following = it != null; navigating = it?.nav != null }
+        recording = Recording.state.value.active
         val strip = ActionStrip.Builder()
-            .addAction(icon(R.drawable.car_layers) {
-                CarToast.makeText(carContext, renderer.nextStyle(), CarToast.LENGTH_SHORT).show()
-            })
-            .addAction(icon(R.drawable.car_search) { screenManager.push(PointsCarScreen(carContext, { renderer.setHeadingUp(it) }) { w -> routeTo(w) }) })
+            .addAction(icon(R.drawable.car_layers) { screenManager.push(MapSettingsCarScreen(carContext, renderer)) })
+            .addAction(icon(R.drawable.car_search) { screenManager.push(PointsCarScreen(carContext) { w -> routeTo(w) }) })
             // Con una ruta o un track en marcha, este botón es el de pararlo (guardar un punto conduciendo es lo de menos).
             .addAction(if (following) icon(R.drawable.car_close, CarColor.RED) { Following.stop(carContext) }
                 else icon(R.drawable.car_add_place) { savePoint() })
@@ -234,7 +246,47 @@ class MapCarScreen(car: CarContext) : Screen(car) {
     /** Los dibujos de maniobra ya hechos (se piden a cada posición). */
     private val icons = HashMap<Pair<MKind, Int>, Bitmap>()
 
-    private fun step(kind: MKind, exit: Int, angle: Int, cue: String, @Suppress("UNUSED_PARAMETER") last: Boolean): Step {
+    private var lastTrip: Any? = null
+    private var lastTripAt = 0L
+
+    /**
+     * La maniobra siguiente y lo que queda, para lo que el coche pinta por su cuenta: el head-up
+     * (la flecha y la distancia en el parabrisas), el cuadro de instrumentos y la barra de Android Auto
+     * cuando se ve otra app. Antes no se mandaba nada y esas pantallas se quedaban vacías. Como mucho
+     * una vez por segundo si sólo cambia la distancia.
+     */
+    private fun sendTrip(c: Card?, fol: FollowState?) {
+        val s = c?.step
+        val key: Any = s ?: "esperando"
+        val now = SystemClock.elapsedRealtime()
+        val sameManeuver = (lastTrip as? StepCard)?.let { it.kind == s?.kind && it.name == s.name } == true
+        if (key == lastTrip || (sameManeuver && now - lastTripAt < 1000)) return
+        lastTrip = key; lastTripAt = now
+        val trip = Trip.Builder()
+        if (s == null) {
+            // Recalculando, fuera de la ruta o sin GPS: el coche enseña que está cargando.
+            trip.setLoading(true)
+            fol?.nav?.let { trip.addDestination(Destination.Builder().setName(it.destName).build(),
+                TravelEstimate.Builder(carDistance(0), ZonedDateTime.now()).build()) }
+        } else {
+            val at = ZonedDateTime.now()
+            val left = s.remainingS
+            // Hasta la maniobra, la parte proporcional del tiempo que queda.
+            val toStep = left?.let { if (s.remainingM > 0) it * s.distanceM / s.remainingM else 0L }
+            val stepEst = TravelEstimate.Builder(carDistance(s.distanceM), at.plusSeconds(toStep ?: 0))
+                .apply { toStep?.let { setRemainingTimeSeconds(it) } }.build()
+            val destEst = TravelEstimate.Builder(carDistance(s.remainingM), at.plusSeconds(left ?: 0))
+                .apply { left?.let { setRemainingTimeSeconds(it) } }.build()
+            trip.addStep(step(s.kind, s.exit, s.angle, s.name), stepEst)
+                .addDestination(Destination.Builder().setName(s.destName).build(), destEst)
+        }
+        runCatching { nav.updateTrip(trip.build()) }
+    }
+
+    private fun carDistance(m: Int): Distance =
+        if (m >= 1000) Distance.create(m / 1000.0, Distance.UNIT_KILOMETERS_P1) else Distance.create(m.toDouble(), Distance.UNIT_METERS)
+
+    private fun step(kind: MKind, exit: Int, angle: Int, cue: String): Step {
         val type = when (kind) {
             MKind.LEFT -> Maneuver.TYPE_TURN_NORMAL_LEFT
             MKind.RIGHT -> Maneuver.TYPE_TURN_NORMAL_RIGHT
@@ -255,7 +307,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
             else -> Maneuver.TYPE_STRAIGHT
         }
         val m = Maneuver.Builder(type)
-            .setIcon(CarIcon.Builder(IconCompat.createWithBitmap(maneuverIcon(kind, angle))).build())
+            .setIcon(CarIcon.Builder(IconCompat.createWithBitmap(icons.getOrPut(kind to angle) { maneuverIcon(kind, angle) })).build())
         if (type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW)
             m.setRoundaboutExitNumber(kotlin.math.abs(exit).coerceAtLeast(1))
         return Step.Builder(cue).setManeuver(m.build()).build()
@@ -441,7 +493,7 @@ class MapCarScreen(car: CarContext) : Screen(car) {
 }
 
 /** Los puntos, los más cerca primero (el coche limita cuántas filas se ven); tocar uno lo hace destino. */
-class PointsCarScreen(car: CarContext, private val onHeadingUp: (Boolean) -> Unit, private val onPick: (es.altamirano.gps.core.Waypoint) -> Unit) : Screen(car) {
+class PointsCarScreen(car: CarContext, private val onPick: (es.altamirano.gps.core.Waypoint) -> Unit) : Screen(car) {
     @Suppress("DEPRECATION") // setTitle/setHeaderAction: Header pide un Android Auto más nuevo.
     override fun onGetTemplate(): Template {
         val limit = runCatching {
@@ -484,7 +536,7 @@ class PointsCarScreen(car: CarContext, private val onHeadingUp: (Boolean) -> Uni
         // Los ajustes de radares, aquí: en el mapa no caben más botones (la plantilla deja cuatro y cuatro).
         val strip = androidx.car.app.model.ActionStrip.Builder().addAction(Action.Builder()
             .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.car_settings)).build())
-            .setOnClickListener { screenManager.push(RadarSettingsCarScreen(carContext, onHeadingUp)) }.build()).build()
+            .setOnClickListener { screenManager.push(RadarSettingsCarScreen(carContext)) }.build()).build()
         return ListTemplate.Builder().setTitle("Puntos").setHeaderAction(Action.BACK).setActionStrip(strip).setSingleList(list.build()).build()
     }
 }

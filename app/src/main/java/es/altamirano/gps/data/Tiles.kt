@@ -287,9 +287,16 @@ object Tiles {
         return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-    /** Al empezar a seguir un camino: guardar sus mapas si hay red (y no se está bajando ya otra cosa). */
-    fun saveAlong(context: Context, points: List<TrackPoint>) {
-        if (canUseNetwork(context)) scope.launch { startRoute(points, Prefs(context).style) }
+    /**
+     * Al empezar a seguir un camino: guardar sus mapas si hay red (y no se está bajando ya otra cosa).
+     * Una ruta en coche, sólo con wifi (red sin tarifa): con datos del móvil eran decenas de megas de
+     * golpe (la franja de z10 a z17, otra vez en cada recálculo) y a Bruno se le cortaba la radio por
+     * internet en el coche. Por carretera suele haber cobertura y el mapa baja lo que se va viendo.
+     */
+    fun saveAlong(context: Context, points: List<TrackPoint>, car: Boolean = false) {
+        if (!canUseNetwork(context)) return
+        if (car && context.getSystemService(android.net.ConnectivityManager::class.java)?.isActiveNetworkMetered != false) return
+        scope.launch { startRoute(points, Prefs(context).style) }
     }
 
     private const val ROUTE_ZMIN = 10

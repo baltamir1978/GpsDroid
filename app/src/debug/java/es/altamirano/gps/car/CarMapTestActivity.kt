@@ -45,8 +45,8 @@ class CarMapTestActivity : Activity() {
         }
         val dark = intent.getBooleanExtra("dark", false)
         map = CarMapRenderer(this, dark)
-        // --es estilo topo|pnoa|hibrido: probar los otros mapas (se cambia como con el botón de capas).
-        intent.getStringExtra("estilo")?.let { k -> repeat(4) { if (es.altamirano.gps.data.Prefs(this).carStyle != k) map.nextStyle() } }
+        // --es estilo topo|pnoa|hibrido: probar los otros mapas (como al elegirlo en «Mapa»).
+        intent.getStringExtra("estilo")?.let { k -> map.setStyle(es.altamirano.gps.core.MapStyle.fromKey(k)) }
         map.setPanel(ManeuverOverlay.Panel(null, "250 m", "Gira a la derecha", "15:42 · 12 min · 6,3 km"))
         var lat = 40.4720; var lon = -3.6895; var step = 0
         val tick = object : Runnable {

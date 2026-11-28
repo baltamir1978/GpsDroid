@@ -46,6 +46,38 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.31.0 (28-nov-2026): Android Auto — parar la ruta, menos datos, «Usar la red», head-up y cuadro.** Bruno,
+tras probar en el coche: al elegir destino y dar «Empezar» no había botón para cancelar la ruta (quería
+una X); la grabación va bien aunque se haga otra cosa; «consume mucha conexión de datos porque se me corta
+la radio por internet»; no hay botón de con o sin conexión en Android Auto; y su coche tiene, además de la
+pantalla principal, una secundaria (donde Waze también pinta el mapa) y un head-up con el siguiente giro,
+y la app no usaba ninguna de las dos.
+- **La X**: ya existía (`car_close` en rojo en lugar de «guardar punto» con algo en marcha), pero los
+  botones salían de campos que sólo se ponían al día con la pantalla del mapa delante; mientras se
+  elegía la ruta (`RouteChoiceCarScreen` encima) no se enteraba y al volver se pedía la plantilla con
+  los botones de antes. Ahora `onGetTemplate` lee `Following.state`/`Recording.state` en el momento.
+  Además, Android Auto esconde las tiras de botones al rato de no tocar: aparecen al tocar el mapa
+  (se le dice a Bruno). `navigating` (botones) y `told` (lo dicho al coche) van ahora por separado.
+- **Datos**: lo gordo era `Tiles.saveAlong` al empezar una ruta: la franja ±500 m de z10 a z17 del
+  callejero y del mapa del móvil (decenas de MB en una ruta de coche, y otra vez en cada recálculo), en
+  plena marcha y con los datos del móvil. Ahora, en rutas en coche, sólo si la red no tiene tarifa
+  (`isActiveNetworkMetered == false`, el wifi); a pie y siguiendo tracks, como antes (es para el monte).
+  Sigue bajando lo que se ve en el mapa y, si faltan, los datos de rutas de BRouter (una vez por zona).
+- **«Usar la red» en el coche**: el botón de capas abre ahora `MapSettingsCarScreen` («Mapa»): los
+  cuatro mapas (tocar = elegir y volver; antes el botón pasaba al siguiente con un aviso), «Usar la
+  red» (`Prefs.online` + `Tiles.setOnline`, el mismo ajuste que en el móvil) y norte/dirección arriba
+  (sale de «Ajustes», que pasa a llamarse «Radares»). `CarMapRenderer.setStyle`/`CAR_STYLES`.
+- **Head-up y barra de Android Auto**: `MapCarScreen.sendTrip` manda con `NavigationManager.updateTrip`
+  la maniobra (`step()`, que estaba sin uso desde la 0.24.0, con el dibujo y el tipo), la distancia y
+  el tiempo hasta ella y hasta el destino; recalculando o fuera de la ruta, `setLoading(true)`. Como
+  mucho una vez por segundo si sólo cambia la distancia. Nuestra tarjeta en el mapa sigue igual.
+- **Cuadro de instrumentos**: `FEATURE_CLUSTER` en el manifiesto y `onCreateSession(SessionInfo)`: en
+  la sesión del cuadro (`DISPLAY_TYPE_CLUSTER`), `ClusterCarScreen`, otro `CarMapRenderer` (sin tarjeta;
+  la maniobra la pinta el coche con el `Trip`) que sigue la posición y cambia de mapa con el principal
+  (`CarMapRenderer.styleChanges`). La plantilla exige una tira de botones (no se ve en el cuadro).
+- **Sin probar** en el coche (no hay DHU aquí, y el cuadro/head-up dependen del coche); pruebas y lint
+  pasan.
+
 **0.30.0 (28-nov-2026, en Play —prueba interna— el mismo día): pestaña «Puntos» para elegir los iconos del callejero.** Bruno: el callejero
 vectorial «ha indicado un montón de cosas que no me interesan… todas las antenas de telefonía móvil…
 me interesaría como mucho hospitales, farmacias, iglesias y poco más»; y «lo suyo sería poder

@@ -68,15 +68,16 @@ ubicación por red ni servicios de Google.
   si te sales (o vas por otro sitio antes de llegar al inicio) calcula otra desde donde estés. En
   coche entra por pistas de tierra si por carretera no llega, y si al final no hay camino hasta el
   punto, lo avisa y guía en línea recta. Al empezar a seguir una ruta o un track con conexión, guarda
-  los mapas de todo el camino (±500 m) por si más adelante no hay cobertura. En coche avisa de los
+  los mapas de todo el camino (±500 m) por si más adelante no hay cobertura (en coche, sólo con wifi: con
+  datos del móvil eran muchos megas de golpe). En coche avisa de los
   radares que hay en la ruta (fijos, tramos y móviles anunciados de la DGT, Cataluña, Euskadi,
   ayuntamientos y OpenStreetMap, vía Radares Anunciados) y de las cámaras de semáforo (OpenStreetMap), con la distancia, el modo y las clases a
   elegir; en el mapa salen como señales (con su límite) yendo a más de 20 km/h o con una ruta en coche;
   en Android Auto, además, la velocidad en una esquina y el mapa con la dirección de la marcha hacia
   arriba (o el norte, a elegir).
-- **Android Auto**: de serie el callejero vectorial del IGN (los nombres de las calles siguen derechos al girar) y, con el botón de capas, el topográfico, el satélite y el híbrido; el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
+- **Android Auto**: de serie el callejero vectorial del IGN (los nombres de las calles siguen derechos al girar) y, con el botón de capas (pantalla «Mapa»), el topográfico, el satélite y el híbrido, «Usar la red» y norte o dirección arriba; el mapa del IGN en el coche, con tu posición, capas, zoom, arrastrar, el track
   que se graba, los puntos, guardar un punto donde estás, grabar, la tarjeta del destino (flecha,
-  distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador. En GrapheneOS necesita Google Play aislado y Android Auto; y, como
+  distancia y a qué mano queda) el track que se sigue (lo que queda o, fuera de él, hacia dónde volver) y, yendo por una ruta, cada maniobra como en un navegador, con una X roja para pararla. La maniobra va también al head-up y al cuadro de instrumentos, y el mapa sale en el cuadro si el coche lo deja. En GrapheneOS necesita Google Play aislado y Android Auto; y, como
   la app no viene de Google Play, hay que activar **«Fuentes desconocidas»** en los ajustes de
   desarrollador de Android Auto (se abren tocando varias veces la versión en sus ajustes).
 - **Mapas offline**: bajar una zona (alrededor del centro del mapa o de tu posición, o una sierra
