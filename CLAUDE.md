@@ -68,7 +68,8 @@ seleccionarlo desde la app, una pestaña para eso».
   la lista y mirar qué capas nuevas salen.
 - **Probado en el emulador `visor`** (depuración): callejero a z16 en Chamberí con lo de serie (sólo
   iglesias y la comisaría de Santa Engracia), «Ninguno» (sin iconos, calles igual), híbrido cargando.
-  **Sin probar en el móvil ni en el coche.**
+  **Bruno confirma que funciona en el móvil** (28-nov-2026: «perfecto lo de los puntos, funciona»); en el
+  coche, sin probar.
 
 **0.29.0 (28-nov-2026): capa de Metro, Metro Ligero y Cercanías de Madrid (sólo en el móvil).** Bruno:
 «una capa en Madrid con las líneas de metro, semitransparente y que se pudiera activar, para ver las
