@@ -26,7 +26,9 @@ proyectos; aquí va lo propio de esta.
   callejero = estilo vectorial del CNIG; topográfico y satélite = estilo mínimo con la capa raster
   WMTS del IGN (`MapLayer.urlTemplate`), escrito en `files/estilos/<capa>.json` y usado por `file://`
   (también para las descargas); híbrido = el vectorial con sólo sus símbolos (borde blanco marcado) y la
-  ortofoto debajo. `map/GpsLayers`: todo lo de la app como capas GeoJSON (tracks, rutas, puntos con
+  ortofoto debajo; en los dos, los iconos de puntos sólo de las categorías elegidas en la pestaña
+  «Puntos» (`core/MapPois`: `PoiCategory` agrupa capas del estilo por prefijo de `id`; `Prefs.pois`;
+  `MapStyles.filterPois` las oculta al cargar el estilo). `map/GpsLayers`: todo lo de la app como capas GeoJSON (tracks, rutas, puntos con
   `id` para tocarlos, alternativas con `i`, radares con iconos de `ui/RadarMarks`, posición y círculo de
   precisión), igual en el móvil y en el coche; `install` las vuelve a poner tras cada cambio de estilo.
 - **`data/Tiles`**: descargas = regiones de MapLibre (`OfflineManager`) en `files/mbgl-offline.db`,
@@ -43,6 +45,30 @@ proyectos; aquí va lo propio de esta.
 - Interfaz sólo en español (como ZeroGPS). Material 3 Expressive con los colores del sistema.
 
 ## Estado
+
+**0.30.0 (28-nov-2026): pestaña «Puntos» para elegir los iconos del callejero.** Bruno: el callejero
+vectorial «ha indicado un montón de cosas que no me interesan… todas las antenas de telefonía móvil…
+me interesaría como mucho hospitales, farmacias, iglesias y poco más»; y «lo suyo sería poder
+seleccionarlo desde la app, una pestaña para eso».
+- El estilo del CNIG trae ~85 capas con icono (casi todas de `servicio_instalacion_pto`, una por
+  `clase`). `core/MapPois`: 41 categorías en 8 grupos (`PoiGroup`); cada una casa capas por prefijo
+  exacto del `id` (`p` o `p-…`: «parque» no se lleva los parques temáticos; alguna capa trae un
+  espacio al final). Las capas sin categoría (calles, pueblos, el rótulo genérico
+  `servicio_instalacion_pto-texto`, los nombres de parques y jardines, que son de polígonos) no se
+  tocan. Ojo: en el estilo, `servicio_instalacion_pto-texto-faro` es el rótulo de las minas.
+- De serie: hospitales y centros de salud, emergencias, policía, iglesias (todas las religiosas),
+  estaciones de tren y autobús, áreas de servicio y el número de la carretera. **Farmacias no hay** en
+  los datos del CNIG (se le dijo a Bruno; harían falta de OpenStreetMap, otra capa).
+- Pestaña «Puntos» (`ui/PoisScreen`, entre Tracks y Offline): «Los de serie / Todos / Ninguno», y por
+  grupo una tarjeta con «Poner/Quitar todos» e interruptores. Se guarda al tocar (`Prefs.pois`); el
+  mapa del móvil lo aplica al volver a él (se rehace al cambiar de pestaña) y el coche al cargar un
+  estilo. Sólo se oculta: lo descargado sigue valiendo.
+- `MapPoisTest` con la lista de capas del estilo del 28-nov (`src/test/resources/cnig-capas.txt`):
+  todo icono tiene categoría y nada que no sea símbolo la tiene. Si el CNIG cambia el estilo, rehacer
+  la lista y mirar qué capas nuevas salen.
+- **Probado en el emulador `visor`** (depuración): callejero a z16 en Chamberí con lo de serie (sólo
+  iglesias y la comisaría de Santa Engracia), «Ninguno» (sin iconos, calles igual), híbrido cargando.
+  **Sin probar en el móvil ni en el coche.**
 
 **0.29.0 (28-nov-2026): capa de Metro, Metro Ligero y Cercanías de Madrid (sólo en el móvil).** Bruno:
 «una capa en Madrid con las líneas de metro, semitransparente y que se pudiera activar, para ver las

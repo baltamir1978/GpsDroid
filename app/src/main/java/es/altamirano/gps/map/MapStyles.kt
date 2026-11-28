@@ -3,6 +3,8 @@ package es.altamirano.gps.map
 import android.content.Context
 import es.altamirano.gps.core.MapLayer
 import es.altamirano.gps.core.MapStyle
+import es.altamirano.gps.core.PoiCategory
+import es.altamirano.gps.data.Prefs
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.Property
@@ -20,11 +22,14 @@ import java.io.File
  *   letras del vectorial (para los nombres de los puntos). Se escribe en un fichero para poder usar su
  *   `file://` también en las descargas (una región de MapLibre se define con la URL de un estilo).
  * - Híbrido: el vectorial con sólo sus rótulos e iconos y la ortofoto debajo (nombres derechos al girar).
+ * En los dos con el vectorial, los iconos de puntos sólo de las categorías elegidas en «Puntos» ([Prefs.pois]).
  */
 object MapStyles {
     private lateinit var dir: File
+    private lateinit var prefs: Prefs
 
     fun init(context: Context) {
+        prefs = Prefs(context)
         dir = File(context.filesDir, "estilos").apply { mkdirs() }
         // Se reescriben siempre: si cambia la plantilla en una versión nueva, que se use.
         MapLayer.entries.filter { it.raster }.forEach { File(dir, "${it.key}.json").writeText(rasterStyleJson(it)) }
@@ -72,9 +77,25 @@ object MapStyles {
                     setMaxZoom(ortho.maxZoom.toFloat()); attribution = MapLayer.ATTRIBUTION
                 }, 256))
                 st.addLayerAt(RasterLayer("ign-${ortho.key}", "ign-${ortho.key}"), 0)
+                filterPois(st)
                 onLoaded(st)
             }
-            else -> map.setStyle(Style.Builder().fromUri(uriOf(style.base)), onLoaded)
+            else -> map.setStyle(Style.Builder().fromUri(uriOf(style.base))) { st ->
+                if (!style.base.raster) filterPois(st)
+                onLoaded(st)
+            }
+        }
+    }
+
+    /**
+     * Oculta los iconos de las categorías apagadas. Sólo se ocultan (las teselas son las mismas: lo
+     * descargado sigue valiendo); las capas que el CNIG ya trae ocultas no se encienden.
+     */
+    private fun filterPois(st: Style) {
+        val on = prefs.pois
+        st.layers.forEach { l ->
+            val c = PoiCategory.of(l.id) ?: return@forEach
+            if (c !in on) l.setProperties(PropertyFactory.visibility(Property.NONE))
         }
     }
 }

@@ -3,6 +3,7 @@ package es.altamirano.gps.data
 import android.content.Context
 import android.content.SharedPreferences
 import es.altamirano.gps.core.MapStyle
+import es.altamirano.gps.core.PoiCategory
 
 /** Lo que se recuerda entre sesiones (lo que en ZeroGPS es `maps.conf`). */
 class Prefs(context: Context) {
@@ -39,6 +40,11 @@ class Prefs(context: Context) {
     var transit: Boolean
         get() = p.getBoolean("transit", false)
         set(v) = p.edit().putBoolean("transit", v).apply()
+
+    /** Los iconos del callejero y del híbrido que se ven (pestaña «Puntos»); sin tocar, los de serie. */
+    var pois: Set<PoiCategory>
+        get() = PoiCategory.parse(p.getString("pois", null))
+        set(v) = p.edit().putString("pois", PoiCategory.format(v)).apply()
 
     /** Mantener la pantalla encendida mientras se ve el mapa. */
     var keepScreenOn: Boolean

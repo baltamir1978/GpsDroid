@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.SatelliteAlt
 import androidx.compose.material3.Icon
@@ -56,6 +57,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     MAP("Mapa", Icons.Filled.Map),
     SKY("Satélites", Icons.Filled.SatelliteAlt),
     TRACKS("Tracks", Icons.Filled.Route),
+    POIS("Puntos", Icons.Filled.Place),
     OFFLINE("Offline", Icons.Filled.CloudDownload),
 }
 
@@ -94,6 +96,7 @@ private fun App() {
                 Tab.MAP -> MapScreen()
                 Tab.SKY -> SkyScreen()
                 Tab.TRACKS -> TracksScreen()
+                Tab.POIS -> PoisScreen()
                 Tab.OFFLINE -> DownloadScreen()
             }
         }

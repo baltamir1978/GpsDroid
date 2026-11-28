@@ -21,6 +21,9 @@ ubicación por red ni servicios de Google.
   Tu posición con su precisión y, si te mueves, hacia dónde vas; seguir la posición, el nivel de
   zoom, la escala, y un botón para no usar la red (sólo lo guardado, sin gastar datos). En modo escritorio, la
   rueda del ratón acerca y aleja por donde está el cursor.
+- **Puntos** (pestaña): qué iconos del Mapa Base salen en el callejero y el híbrido (también en el
+  coche), por categorías: hospitales, iglesias, policía, estaciones, carreteras… y, apagados de serie,
+  antenas, torres eléctricas, depuradoras, polígonos y demás. Farmacias no hay: el IGN no las tiene.
 - **Metro, Metro Ligero y Cercanías de Madrid** (botón del tren en la barra del mapa, sólo en el
   móvil): las líneas semitransparentes con su color encima de cualquier mapa, las estaciones y, al
   acercarse, su nombre con las líneas que paran. Va dentro de la app: funciona sin red.
