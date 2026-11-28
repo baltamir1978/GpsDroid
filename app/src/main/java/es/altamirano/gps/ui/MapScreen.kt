@@ -23,8 +23,10 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Subway
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -130,6 +132,7 @@ fun MapScreen() {
     val prefs = remember { Prefs(context) }
     var style by remember { mutableStateOf(prefs.style) }
     var online by remember { mutableStateOf(prefs.online) }
+    var transit by remember { mutableStateOf(prefs.transit) }
     // Seguir la posición: se quita al mover el mapa con el dedo y se vuelve con el botón.
     var follow by remember { mutableStateOf(prefs.view == null) }
     var zoom by remember { mutableDoubleStateOf(prefs.view?.third ?: 6.0) }
@@ -239,6 +242,7 @@ fun MapScreen() {
         MapStyles.apply(m, style, layers) { st -> layers.install(st) }
     }
     LaunchedEffect(online) { prefs.online = online; Tiles.setOnline(online) }
+    LaunchedEffect(transit) { prefs.transit = transit; layers.setTransit(transit) }
     LaunchedEffect(Unit) { mapView.keepScreenOn = prefs.keepScreenOn }
 
     /** Mover el mapa a un punto (con [z] en la escala de siempre, o el zoom de ahora). */
@@ -447,13 +451,17 @@ fun MapScreen() {
                 IconButton(onClick = { online = !online }) {
                     Icon(if (online) Icons.Filled.Cloud else Icons.Filled.CloudOff, if (online) "Usando la red" else "Sin red")
                 }
+                IconToggleButton(checked = transit, onCheckedChange = { transit = it }) {
+                    Icon(Icons.Filled.Subway, if (transit) "Ocultar metro y Cercanías" else "Ver metro y Cercanías",
+                        tint = if (transit) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f))
+                }
                 IconToggleButton(checked = follow, onCheckedChange = { follow = it }) {
                     Icon(if (follow) Icons.Filled.MyLocation else Icons.Filled.LocationSearching, "Seguir mi posición")
                 }
                 Text("z%d".format(zoom.toInt()) + if (zoom >= style.maxZoom - 0.01) "+" else "", fontWeight = FontWeight.Bold, fontSize = 14.sp,
                     modifier = Modifier.padding(horizontal = 8.dp))
             }
-            Text(MapLayer.ATTRIBUTION, fontSize = 10.sp, color = Color.Black.copy(alpha = 0.75f),
+            Text(MapLayer.ATTRIBUTION + if (transit) " · Transporte © CRTM" else "", fontSize = 10.sp, color = Color.Black.copy(alpha = 0.75f),
                 modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 1.dp))
         }
     }

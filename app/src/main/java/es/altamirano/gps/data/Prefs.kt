@@ -35,6 +35,11 @@ class Prefs(context: Context) {
         get() = p.getBoolean("online", true)
         set(v) = p.edit().putBoolean("online", v).apply()
 
+    /** La capa de Metro, Metro Ligero y Cercanías de Madrid en el mapa del móvil. */
+    var transit: Boolean
+        get() = p.getBoolean("transit", false)
+        set(v) = p.edit().putBoolean("transit", v).apply()
+
     /** Mantener la pantalla encendida mientras se ve el mapa. */
     var keepScreenOn: Boolean
         get() = p.getBoolean("keep_screen_on", false)

@@ -21,6 +21,9 @@ ubicación por red ni servicios de Google.
   Tu posición con su precisión y, si te mueves, hacia dónde vas; seguir la posición, el nivel de
   zoom, la escala, y un botón para no usar la red (sólo lo guardado, sin gastar datos). En modo escritorio, la
   rueda del ratón acerca y aleja por donde está el cursor.
+- **Metro, Metro Ligero y Cercanías de Madrid** (botón del tren en la barra del mapa, sólo en el
+  móvil): las líneas semitransparentes con su color encima de cualquier mapa, las estaciones y, al
+  acercarse, su nombre con las líneas que paran. Va dentro de la app: funciona sin red.
 - **Satélites**: el cielo con los satélites a la vista y los que se usan, por constelación, y el
   fix (coordenadas, altitud, precisión). Las altitudes son **sobre el nivel del mar**, como en
   los mapas (el GPS da la altura sobre el elipsoide, unos 50 m más en España; desde Android 14 se
@@ -96,5 +99,7 @@ Necesita `../droid-common` clonado al lado (tema y piezas comunes de las apps).
 Datos de rutas: © colaboradores de OpenStreetMap (ODbL), preparados por BRouter (MIT). Radares:
 [Radares Anunciados](https://geiserx.github.io/radares-anunciados-ha/) (ODbL; DGT, SCT, Euskadi,
 ayuntamientos y © colaboradores de OpenStreetMap) y Dirección General de Tráfico (Punto de Acceso Nacional).
+Transporte de Madrid: © Consorcio Regional de Transportes de Madrid (datos abiertos), con los nombres
+de las estaciones de © colaboradores de OpenStreetMap (ODbL); se rehace con `Tools/transporte_madrid.py`.
 
 © Instituto Geográfico Nacional de España, CC BY 4.0 (la atribución se ve siempre en el mapa).

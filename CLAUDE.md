@@ -44,6 +44,30 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.29.0 (28-nov-2026): capa de Metro, Metro Ligero y Cercanías de Madrid (sólo en el móvil).** Bruno:
+«una capa en Madrid con las líneas de metro, semitransparente y que se pudiera activar, para ver las
+estaciones y las líneas con sus colores»; eligió los tres modos y sólo el móvil.
+- Datos: `assets/transporte_madrid.geojson` (264 KB) hecho con `Tools/transporte_madrid.py` (rehacerlo
+  con cada versión si cambia la red). Sale de los servicios abiertos del **CRTM** en ArcGIS
+  (`services5.arcgis.com/UxADft6QPcvFyDU1`: `Lineas_Metro`, `M10_Lineas`, `M5_Lineas`; una capa de
+  tramos y otra de estaciones por línea y sentido). La vía, de los tramos de un sentido; **las estaciones,
+  del final de cada tramo de los dos sentidos** (lleva su `DENOMINACION`): las capas `*_ESTACION` no son
+  fiables (la de la L1 S1 trae estaciones de otras líneas). Mismo nombre a menos de 600 m = una estación
+  con todas sus líneas (los andenes de la L8 en Nuevos Ministerios están a 450 m). El CRTM no da colores
+  (van en el script, los de los planos, cotejados con OpenStreetMap) y sus nombres vienen en mayúsculas
+  sin tildes: se toma el de la estación de OpenStreetMap (Overpass) a menos de 400 m que se llame igual
+  sin tildes. 241 estaciones de metro, 56 de Metro Ligero y 95 de Cercanías. `TransporteTest` vigila el
+  fichero (13 líneas de metro, 4 de ligero, 9 de Cercanías, colores y nombres).
+- `GpsLayers.addTransit` (si no es el coche): debajo de todo lo de la app, borde oscuro al 35 % (el
+  Ramal es blanco) y la línea con su color al 70 %; estaciones (punto blanco) desde z12 y nombre + líneas
+  desde z14 (zooms de 256). **El zoom de una expresión tiene que ir arriba del todo**: dentro de un `match`
+  MapLibre lo ignora en silencio y la línea sale de 1 dp (pasó).
+- Botón del tren en la barra del mapa (`Prefs.transit`, apagado de serie); con la capa puesta la
+  atribución añade «Transporte © CRTM».
+- **Probado en el emulador `visor`** (depuración): satélite a z13 y z14, topográfico a z15, callejero a
+  z12; se recuerda al volver a abrir. La release (sólo arm64) no se ha podido abrir en el emulador.
+  **Sin probar en el móvil.**
+
 **0.28.2 (27-nov-2026, en Play —prueba interna— el mismo día): sin «fallos» falsos en las descargas.** Bruno, con la 0.28.1: «funciona todo
 pero en la descarga me ha marcado 28 fallos». Eran reintentos: MapLibre reintenta solo los errores de
 red y del servidor y cada `onError` se contaba como fallo aunque la tesela acabara bajando (la región

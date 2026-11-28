@@ -67,6 +67,9 @@ class GpsLayers(private val ctx: Context, private val density: Float, private va
 
     private var lastRouteKey: Any? = null
 
+    /** Metro, Metro Ligero y Cercanías de Madrid (sólo en el móvil). */
+    private var transit = false
+
     /** Las capas que se pueden tocar en el móvil. */
     companion object {
         const val POINTS_LAYER = "gps-points-c"
@@ -90,6 +93,14 @@ class GpsLayers(private val ctx: Context, private val density: Float, private va
         private const val ICON_ARROW = "gps-pos-arrow"
         private const val ICON_DOT = "gps-pos-dot"
         private const val ICON_STALE = "gps-pos-stale"
+        private const val TRANSIT = "gps-transit"
+        private const val TRANSIT_ASSET = "transporte_madrid.geojson"
+        /** Las estaciones desde z12 de las teselas de 256 y sus nombres desde z14 (MapLibre: uno menos). */
+        private const val STATION_MIN_ZOOM = 11f
+        private const val STATION_TEXT_MIN_ZOOM = 13f
+
+        /** El GeoJSON de `assets` (264 KB), leído una vez: se vuelve a poner en cada cambio de estilo. */
+        @Volatile private var transitJson: String? = null
         /** z11 de las teselas de 256 (MapLibre cuenta uno menos): más lejos los radares serían una nube. */
         private const val RADAR_MIN_ZOOM = 10f
     }
@@ -124,6 +135,7 @@ class GpsLayers(private val ctx: Context, private val density: Float, private va
                 Point.fromLngLat(-180.0, 85.0), Point.fromLngLat(-180.0, -85.0))))))
             st.addLayer(FillLayer("$DIM-l", DIM).withProperties(P.fillColor(android.graphics.Color.BLACK), P.fillOpacity(0.4f)))
         }
+        if (!car) addTransit(st)
         st.addLayer(line(ALT_LAYER, ALT, MapColors.followDone.toArgb(), 6f * k))
         st.addLayer(line("$PREVIEW-c", PREVIEW, white, 7f * k + 4f))
         st.addLayer(line("$PREVIEW-l", PREVIEW, MapColors.follow.toArgb(), 7f * k))
@@ -160,6 +172,60 @@ class GpsLayers(private val ctx: Context, private val density: Float, private va
         // Lo último que se sabía.
         lastRouteKey = null; radarsShown = null
         reloadRadars(); pushPosition(); pushFollow(); pushTracks(); pushPoints(); pushPreview()
+    }
+
+    // ---- Transporte de Madrid ----
+
+    /**
+     * Debajo de todo lo de la app: las líneas con su color, semitransparentes para que se lea el mapa
+     * debajo; las estaciones, puntos blancos; y sus nombres con las líneas al acercarse. Los datos
+     * salen de `Tools/transporte_madrid.py` (CRTM).
+     */
+    private fun addTransit(st: Style) {
+        val json = transitJson ?: runCatching {
+            ctx.assets.open(TRANSIT_ASSET).bufferedReader().use { it.readText() }
+        }.getOrNull()?.also { transitJson = it } ?: return
+        if (st.getSource(TRANSIT) == null) st.addSource(GeoJsonSource(TRANSIT, json))
+        val isLine = Expression.eq(Expression.get("k"), Expression.literal("l"))
+        val isStation = Expression.eq(Expression.get("k"), Expression.literal("s"))
+        val mode = Expression.get("mode")
+        // Más gruesas al acercarse; el metro algo más que Cercanías, que cubre mucho más terreno. El
+        // zoom tiene que ir arriba del todo (MapLibre no lo admite dentro de un `match`: se ignoraba
+        // y salían de 1 dp), así que el modo va dentro de cada parada. [extra]: el borde.
+        fun lineWidth(extra: Float) = Expression.interpolate(Expression.exponential(1.4f), Expression.zoom(),
+            *listOf(9 to 0.5f, 13 to 1f, 16 to 2f).map { (z, k) ->
+                Expression.stop(z, Expression.match(mode, Expression.literal("cercanias"),
+                    Expression.literal(4f * k + extra), Expression.literal(5.5f * k + extra)))
+            }.toTypedArray())
+        // El Ramal es blanco: un borde oscuro debajo de todas para que se vea sobre el mapa claro.
+        st.addLayer(LineLayer("$TRANSIT-c", TRANSIT).withProperties(
+            P.lineColor(android.graphics.Color.rgb(40, 40, 40)), P.lineOpacity(0.35f), P.lineWidth(lineWidth(1.5f)),
+            P.lineCap(Property.LINE_CAP_ROUND), P.lineJoin(Property.LINE_JOIN_ROUND)).withFilter(isLine))
+        st.addLayer(LineLayer("$TRANSIT-l", TRANSIT).withProperties(
+            P.lineColor(Expression.toColor(Expression.get("color"))), P.lineOpacity(0.7f), P.lineWidth(lineWidth(0f)),
+            P.lineCap(Property.LINE_CAP_ROUND), P.lineJoin(Property.LINE_JOIN_ROUND)).withFilter(isLine))
+        st.addLayer(CircleLayer("$TRANSIT-s", TRANSIT).withProperties(
+            P.circleColor(android.graphics.Color.WHITE), P.circleOpacity(0.9f),
+            P.circleRadius(Expression.interpolate(Expression.linear(), Expression.zoom(),
+                Expression.stop(STATION_MIN_ZOOM, 2.5f), Expression.stop(16, 6f))),
+            P.circleStrokeColor(android.graphics.Color.rgb(40, 40, 40)), P.circleStrokeWidth(1.5f),
+        ).withFilter(isStation).apply { minZoom = STATION_MIN_ZOOM })
+        st.addLayer(SymbolLayer("$TRANSIT-t", TRANSIT).withProperties(
+            P.textField(Expression.concat(Expression.get("name"), Expression.literal("\n"), Expression.get("lines"))),
+            P.textFont(arrayOf("Noto Sans Bold")), P.textSize(11f),
+            P.textColor(android.graphics.Color.rgb(30, 30, 30)), P.textHaloColor(android.graphics.Color.WHITE), P.textHaloWidth(1.6f),
+            P.textAnchor(Property.TEXT_ANCHOR_TOP), P.textOffset(arrayOf(0f, 0.7f)), P.textOptional(true),
+        ).withFilter(isStation).apply { minZoom = STATION_TEXT_MIN_ZOOM })
+        pushTransitVisibility()
+    }
+
+    /** Enseña u oculta la capa de transporte (el botón del mapa del móvil). */
+    fun setTransit(on: Boolean) { transit = on; pushTransitVisibility() }
+
+    private fun pushTransitVisibility() {
+        val st = live ?: style ?: return
+        val v = P.visibility(if (transit) Property.VISIBLE else Property.NONE)
+        listOf("$TRANSIT-c", "$TRANSIT-l", "$TRANSIT-s", "$TRANSIT-t").forEach { st.getLayer(it)?.setProperties(v) }
     }
 
     // ---- Iconos ----
