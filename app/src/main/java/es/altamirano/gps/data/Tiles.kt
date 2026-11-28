@@ -238,7 +238,7 @@ object Tiles {
      * Los mapas de un camino (±[marginM]), de z10 a z17: el callejero vectorial (el del coche) y, si el
      * mapa del móvil es otro, también ese. Si ya hay una descarga en marcha, no se pisa.
      */
-    fun startRoute(points: List<TrackPoint>, phoneStyle: MapStyle, marginM: Double = 500.0) {
+    fun startRoute(points: List<TrackPoint>, phoneStyle: MapStyle, marginM: Double = 500.0, maxBytesPerSec: Long? = null) {
         if (job?.isActive == true || points.size < 2) return
         val geometry = corridor(points, marginM)
         val layers = (listOf(MapLayer.VECTOR) + phoneStyle.layers).distinct()
@@ -248,7 +248,7 @@ object Tiles {
                 OfflineGeometryRegionDefinition(MapStyles.downloadUriOf(l), geometry, ROUTE_ZMIN.toDouble(), minOf(ROUTE_ZMAX, l.maxZoom).toDouble(), pixelRatio)
                     as org.maplibre.android.offline.OfflineRegionDefinition
             }
-        }, kind = "camino", route = true, doneMessage = "Mapas del camino guardados")
+        }, kind = "camino", route = true, doneMessage = "Mapas del camino guardados", maxBytesPerSec = maxBytesPerSec)
     }
 
     /**
@@ -289,15 +289,25 @@ object Tiles {
 
     /**
      * Al empezar a seguir un camino: guardar sus mapas si hay red (y no se está bajando ya otra cosa).
-     * Una ruta en coche, sólo con wifi (red sin tarifa): con datos del móvil eran decenas de megas de
-     * golpe (la franja de z10 a z17, otra vez en cada recálculo) y a Bruno se le cortaba la radio por
-     * internet en el coche. Por carretera suele haber cobertura y el mapa baja lo que se va viendo.
+     * Una ruta en coche con datos del móvil, despacio ([CAR_METERED_BYTES_PER_SEC]): de golpe eran
+     * decenas de megas (la franja de z10 a z17, otra vez en cada recálculo) y a Bruno se le cortaba la
+     * radio por internet en el coche. Con wifi, o a pie (para el monte, antes de perder cobertura), a
+     * toda velocidad.
      */
     fun saveAlong(context: Context, points: List<TrackPoint>, car: Boolean = false) {
         if (!canUseNetwork(context)) return
-        if (car && context.getSystemService(android.net.ConnectivityManager::class.java)?.isActiveNetworkMetered != false) return
-        scope.launch { startRoute(points, Prefs(context).style) }
+        val metered = context.getSystemService(android.net.ConnectivityManager::class.java)?.isActiveNetworkMetered != false
+        scope.launch { startRoute(points, Prefs(context).style, maxBytesPerSec = if (car && metered) CAR_METERED_BYTES_PER_SEC else null) }
     }
+
+    /**
+     * Tope de la descarga del camino en coche con datos: 40 KB/s (320 kbit/s). Una radio por internet
+     * gasta 16-40 KB/s y el 4G en carretera da bastante más, así que queda hueco para las dos. Así una
+     * franja de 30 MB tarda unos 13 minutos en vez de uno.
+     */
+    private const val CAR_METERED_BYTES_PER_SEC = 40_000L
+    /** Lo que puede adelantarse al tope antes de pausar (MapLibre pide varias teselas a la vez). */
+    private const val RATE_BURST_BYTES = 150_000L
 
     private const val ROUTE_ZMIN = 10
     private const val ROUTE_ZMAX = 17
@@ -309,7 +319,7 @@ object Tiles {
      * salta lo que ya tiene). Para si falta espacio o si no avanza en [STALL_MS].
      */
     private fun run(work: List<Triple<MapLayer, String, () -> org.maplibre.android.offline.OfflineRegionDefinition>>,
-                    kind: String, route: Boolean, doneMessage: String) {
+                    kind: String, route: Boolean, doneMessage: String, maxBytesPerSec: Long? = null) {
         if (job?.isActive == true) return
         _download.value = DownloadState(true, route = route)
         job = scope.launch {
@@ -332,8 +342,15 @@ object Tiles {
                 val finished = CompletableDeferred<Unit>()
                 var lastProgress = System.currentTimeMillis()
                 var lastDone = -1L
+                // Con tope de velocidad: lo bajado de esta región desde que empezó (lo que ya tenía no cuenta).
+                val started = System.currentTimeMillis()
+                var bytesAtStart = -1L
+                var regionBytes = 0L
+                var paused = false
                 region.setObserver(object : OfflineRegion.OfflineRegionObserver {
                     override fun onStatusChanged(status: OfflineRegionStatus) {
+                        if (bytesAtStart < 0) bytesAtStart = status.completedResourceSize
+                        regionBytes = status.completedResourceSize - bytesAtStart
                         val moved = status.completedResourceCount != lastDone
                         if (moved) { lastDone = status.completedResourceCount; lastProgress = System.currentTimeMillis() }
                         _download.value = _download.value.copy(done = doneBefore + status.completedResourceCount.toInt(),
@@ -352,9 +369,20 @@ object Tiles {
                     override fun mapboxTileCountLimitExceeded(limit: Long) { stopped = "Demasiadas teselas"; finished.complete(Unit) }
                 })
                 region.setDownloadState(OfflineRegion.STATE_ACTIVE)
-                // Esperar a que acabe, vigilando que avance y el espacio.
+                // Esperar a que acabe, vigilando que avance y el espacio y, si hay tope, la velocidad: por
+                // encima de lo permitido se pausa la región y se reanuda cuando la media vuelve a caber
+                // (MapLibre no deja limitar el ancho de banda; pausar corta las peticiones nuevas).
                 while (!finished.isCompleted) {
-                    withTimeoutOrNull(2000) { finished.await() }
+                    withTimeoutOrNull(if (maxBytesPerSec != null) 250L else 2000L) { finished.await() }
+                    if (finished.isCompleted) break
+                    if (maxBytesPerSec != null) {
+                        val now = System.currentTimeMillis()
+                        val allowed = maxBytesPerSec * (now - started) / 1000 + RATE_BURST_BYTES
+                        if (!paused && regionBytes > allowed) { region.setDownloadState(OfflineRegion.STATE_INACTIVE); paused = true }
+                        else if (paused && regionBytes <= allowed) { region.setDownloadState(OfflineRegion.STATE_ACTIVE); paused = false }
+                        // Pausado a propósito no es atascarse.
+                        if (paused) { lastProgress = now; continue }
+                    }
                     // Quince segundos sin avanzar con errores: decir que está reintentando y por qué.
                     if (System.currentTimeMillis() - lastProgress > 15_000 && lastReason != null)
                         _download.value = _download.value.copy(retrying = when (lastReason) {

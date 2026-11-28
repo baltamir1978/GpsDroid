@@ -68,8 +68,8 @@ ubicación por red ni servicios de Google.
   si te sales (o vas por otro sitio antes de llegar al inicio) calcula otra desde donde estés. En
   coche entra por pistas de tierra si por carretera no llega, y si al final no hay camino hasta el
   punto, lo avisa y guía en línea recta. Al empezar a seguir una ruta o un track con conexión, guarda
-  los mapas de todo el camino (±500 m) por si más adelante no hay cobertura (en coche, sólo con wifi: con
-  datos del móvil eran muchos megas de golpe). En coche avisa de los
+  los mapas de todo el camino (±500 m) por si más adelante no hay cobertura (en coche con datos del móvil, despacio,
+  a 40 KB/s, para no cortar la radio por internet). En coche avisa de los
   radares que hay en la ruta (fijos, tramos y móviles anunciados de la DGT, Cataluña, Euskadi,
   ayuntamientos y OpenStreetMap, vía Radares Anunciados) y de las cámaras de semáforo (OpenStreetMap), con la distancia, el modo y las clases a
   elegir; en el mapa salen como señales (con su límite) yendo a más de 20 km/h o con una ruta en coche;

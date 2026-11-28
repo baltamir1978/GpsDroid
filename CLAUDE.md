@@ -46,6 +46,15 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
+**0.31.1 (28-nov-2026): los mapas del camino en coche, despacio en vez de sólo con wifi.** Bruno, sobre
+la 0.31.0: «¿podemos dejarlo como antes pero limitando la velocidad de descarga?».
+- `Tiles.saveAlong`: en ruta en coche con red con tarifa, `startRoute(maxBytesPerSec = 40 KB/s)`; con wifi
+  o a pie, sin tope. MapLibre no deja limitar el ancho de banda: `run` mira cada 250 ms lo bajado de la
+  región (desde que empezó; lo que ya tenía no cuenta) y, si pasa de `tope × tiempo + 150 KB`, la pone
+  `STATE_INACTIVE` hasta que la media vuelve a caber. Pausada a propósito no cuenta como atasco.
+- **Sin probar** (ni en el emulador ni en el coche): cuánto respeta MapLibre la pausa (las peticiones ya
+  lanzadas acaban) y si 40 KB/s basta para que no se corte la radio.
+
 **0.31.0 (28-nov-2026, en Play —prueba interna— el mismo día): Android Auto — parar la ruta, menos datos, «Usar la red», head-up y cuadro.** Bruno,
 tras probar en el coche: al elegir destino y dar «Empezar» no había botón para cancelar la ruta (quería
 una X); la grabación va bien aunque se haga otra cosa; «consume mucha conexión de datos porque se me corta
@@ -58,7 +67,7 @@ y la app no usaba ninguna de las dos.
   los botones de antes. Ahora `onGetTemplate` lee `Following.state`/`Recording.state` en el momento.
   Además, Android Auto esconde las tiras de botones al rato de no tocar: aparecen al tocar el mapa
   (se le dice a Bruno). `navigating` (botones) y `told` (lo dicho al coche) van ahora por separado.
-- **Datos**: lo gordo era `Tiles.saveAlong` al empezar una ruta: la franja ±500 m de z10 a z17 del
+- **Datos** (en la 0.31.1 pasa a «despacio» en vez de «sólo con wifi»): lo gordo era `Tiles.saveAlong` al empezar una ruta: la franja ±500 m de z10 a z17 del
   callejero y del mapa del móvil (decenas de MB en una ruta de coche, y otra vez en cada recálculo), en
   plena marcha y con los datos del móvil. Ahora, en rutas en coche, sólo si la red no tiene tarifa
   (`isActiveNetworkMetered == false`, el wifi); a pie y siguiendo tracks, como antes (es para el monte).
