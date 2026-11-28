@@ -46,7 +46,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.30.0 (28-nov-2026): pestaña «Puntos» para elegir los iconos del callejero.** Bruno: el callejero
+**0.30.0 (28-nov-2026, en Play —prueba interna— el mismo día): pestaña «Puntos» para elegir los iconos del callejero.** Bruno: el callejero
 vectorial «ha indicado un montón de cosas que no me interesan… todas las antenas de telefonía móvil…
 me interesaría como mucho hospitales, farmacias, iglesias y poco más»; y «lo suyo sería poder
 seleccionarlo desde la app, una pestaña para eso».
