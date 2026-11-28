@@ -46,7 +46,7 @@ proyectos; aquí va lo propio de esta.
 
 ## Estado
 
-**0.31.1 (28-nov-2026): los mapas del camino en coche, despacio en vez de sólo con wifi.** Bruno, sobre
+**0.31.1 (28-nov-2026, en Play —prueba interna— el mismo día): los mapas del camino en coche, despacio en vez de sólo con wifi.** Bruno, sobre
 la 0.31.0: «¿podemos dejarlo como antes pero limitando la velocidad de descarga?».
 - `Tiles.saveAlong`: en ruta en coche con red con tarifa, `startRoute(maxBytesPerSec = 40 KB/s)`; con wifi
   o a pie, sin tope. MapLibre no deja limitar el ancho de banda: `run` mira cada 250 ms lo bajado de la
